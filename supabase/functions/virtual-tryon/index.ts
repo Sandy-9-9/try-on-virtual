@@ -39,7 +39,7 @@ serve(async (req) => {
             content: [
               {
                 type: "text",
-                text: "Please create a virtual try-on image. Take the clothing item from the first image and realistically place it on the person in the second image. The result should look like the person is naturally wearing the clothing. Maintain proper proportions, lighting, and shadows to make it look realistic."
+                text: "Generate a photorealistic image of the person in the second image wearing the clothing from the first image. IMPORTANT: Do NOT overlay or paste the clothing. Instead, render the person's body naturally wearing this garment - the clothing should conform to their body shape, posture, and proportions. Replace their current outfit entirely. Match the lighting, shadows, and fabric draping realistically as if photographed while wearing it. The final image should look like an authentic fashion photo of this person in this outfit."
               },
               {
                 type: "image_url",

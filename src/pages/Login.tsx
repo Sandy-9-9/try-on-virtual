@@ -1,10 +1,81 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
+import { useAuth } from "@/context/AuthContext";
+import { toast } from "sonner";
+import { z } from "zod";
+
+const emailSchema = z.string().email("Please enter a valid email address");
+const passwordSchema = z.string().min(6, "Password must be at least 6 characters");
 
 const Login = () => {
   const [isSignUp, setIsSignUp] = useState(false);
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [fullName, setFullName] = useState("");
+  const [loading, setLoading] = useState(false);
+  const { signIn, signUp, user } = useAuth();
+  const navigate = useNavigate();
+
+  // Redirect if already logged in
+  if (user) {
+    navigate("/");
+    return null;
+  }
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+
+    try {
+      // Validate email
+      const emailResult = emailSchema.safeParse(email);
+      if (!emailResult.success) {
+        toast.error(emailResult.error.errors[0].message);
+        setLoading(false);
+        return;
+      }
+
+      // Validate password
+      const passwordResult = passwordSchema.safeParse(password);
+      if (!passwordResult.success) {
+        toast.error(passwordResult.error.errors[0].message);
+        setLoading(false);
+        return;
+      }
+
+      if (isSignUp) {
+        const { error } = await signUp(email, password, fullName);
+        if (error) {
+          if (error.message.includes("already registered")) {
+            toast.error("This email is already registered. Please sign in.");
+          } else {
+            toast.error(error.message);
+          }
+        } else {
+          toast.success("Account created successfully!");
+          navigate("/");
+        }
+      } else {
+        const { error } = await signIn(email, password);
+        if (error) {
+          if (error.message.includes("Invalid login")) {
+            toast.error("Invalid email or password. Please try again.");
+          } else {
+            toast.error(error.message);
+          }
+        } else {
+          toast.success("Welcome back!");
+          navigate("/");
+        }
+      }
+    } catch (err) {
+      toast.error("An unexpected error occurred. Please try again.");
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-muted p-4">
@@ -33,23 +104,31 @@ const Login = () => {
           </p>
 
           {/* Form */}
-          <form className="space-y-4">
+          <form onSubmit={handleSubmit} className="space-y-4">
             {isSignUp && (
               <Input
                 type="text"
                 placeholder="Full Name"
+                value={fullName}
+                onChange={(e) => setFullName(e.target.value)}
                 className="h-12 bg-muted border-0 rounded-lg"
               />
             )}
             <Input
               type="email"
               placeholder="Email Address"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
               className="h-12 bg-muted border-0 rounded-lg"
+              required
             />
             <Input
               type="password"
               placeholder="Password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
               className="h-12 bg-muted border-0 rounded-lg"
+              required
             />
 
             {!isSignUp && (
@@ -61,8 +140,12 @@ const Login = () => {
               </Link>
             )}
 
-            <Button className="w-full h-12 bg-purple hover:bg-purple/90 text-primary-foreground rounded-full font-semibold">
-              {isSignUp ? "SIGN UP" : "SIGN IN"}
+            <Button 
+              type="submit"
+              disabled={loading}
+              className="w-full h-12 bg-purple hover:bg-purple/90 text-primary-foreground rounded-full font-semibold"
+            >
+              {loading ? "Please wait..." : isSignUp ? "SIGN UP" : "SIGN IN"}
             </Button>
           </form>
         </div>

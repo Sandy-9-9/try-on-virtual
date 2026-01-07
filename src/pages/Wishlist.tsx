@@ -7,13 +7,18 @@ import { useCart } from "@/context/CartContext";
 import { toast } from "sonner";
 
 const Wishlist = () => {
-  const { wishlistItems, removeFromWishlist } = useWishlist();
+  const { wishlistItems, removeFromWishlist, loading } = useWishlist();
   const { addToCart } = useCart();
 
-  const handleMoveToCart = (item: typeof wishlistItems[0]) => {
-    addToCart({ ...item });
-    removeFromWishlist(item.id);
-    toast.success(`${item.name} moved to cart!`);
+  const handleMoveToCart = async (item: typeof wishlistItems[0]) => {
+    await addToCart({
+      product_id: item.product_id,
+      product_name: item.product_name,
+      product_price: item.product_price,
+      product_image: item.product_image,
+    });
+    await removeFromWishlist(item.id);
+    toast.success(`${item.product_name} moved to cart!`);
   };
 
   if (wishlistItems.length === 0) {
@@ -53,8 +58,8 @@ const Wishlist = () => {
               >
                 <div className="relative aspect-[3/4] overflow-hidden bg-muted">
                   <img
-                    src={item.image}
-                    alt={item.name}
+                    src={item.product_image}
+                    alt={item.product_name}
                     className="w-full h-full object-cover object-center group-hover:scale-105 transition-transform duration-300"
                   />
                   
@@ -62,7 +67,7 @@ const Wishlist = () => {
                   <button
                     onClick={() => {
                       removeFromWishlist(item.id);
-                      toast.info(`${item.name} removed from wishlist`);
+                      toast.info(`${item.product_name} removed from wishlist`);
                     }}
                     className="absolute top-3 right-3 p-2 bg-background rounded-full shadow-lg hover:bg-destructive hover:text-destructive-foreground transition-colors"
                   >
@@ -71,8 +76,8 @@ const Wishlist = () => {
                 </div>
 
                 <div className="p-4">
-                  <h3 className="font-medium text-card-foreground mb-1">{item.name}</h3>
-                  <p className="text-lg font-bold text-primary mb-4">₹{item.price}/-</p>
+                  <h3 className="font-medium text-card-foreground mb-1">{item.product_name}</h3>
+                  <p className="text-lg font-bold text-primary mb-4">₹{item.product_price}/-</p>
                   
                   <Button
                     onClick={() => handleMoveToCart(item)}

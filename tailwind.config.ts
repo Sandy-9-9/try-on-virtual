@@ -57,6 +57,20 @@ export default {
           border: "hsl(var(--sidebar-border))",
           ring: "hsl(var(--sidebar-ring))",
         },
+        teal: {
+          DEFAULT: "hsl(var(--teal))",
+          dark: "hsl(var(--teal-dark))",
+        },
+        cyan: "hsl(var(--cyan))",
+        pink: "hsl(var(--pink))",
+        purple: {
+          DEFAULT: "hsl(var(--purple))",
+          light: "hsl(var(--purple-light))",
+        },
+      },
+      backgroundImage: {
+        "gradient-purple": "var(--gradient-purple)",
+        "gradient-hero": "var(--gradient-hero)",
       },
       borderRadius: {
         lg: "var(--radius)",

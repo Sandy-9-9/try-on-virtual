@@ -2,12 +2,15 @@ import { useState, useRef } from "react";
 import { Upload, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Link } from "react-router-dom";
+import { supabase } from "@/integrations/supabase/client";
+import { useToast } from "@/hooks/use-toast";
 
 const VirtualTryOn = () => {
   const [clothImage, setClothImage] = useState<string | null>(null);
   const [modelImage, setModelImage] = useState<string | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [result, setResult] = useState<string | null>(null);
+  const { toast } = useToast();
   
   const clothInputRef = useRef<HTMLInputElement>(null);
   const modelInputRef = useRef<HTMLInputElement>(null);
@@ -26,15 +29,38 @@ const VirtualTryOn = () => {
     }
   };
 
-  const handleTryOn = () => {
+  const handleTryOn = async () => {
     if (!clothImage || !modelImage) return;
     
     setIsProcessing(true);
-    // Simulate processing
-    setTimeout(() => {
-      setResult(modelImage);
+    setResult(null);
+
+    try {
+      const { data, error } = await supabase.functions.invoke('virtual-tryon', {
+        body: { clothImage, modelImage }
+      });
+
+      if (error) throw error;
+
+      if (data?.image) {
+        setResult(data.image);
+        toast({
+          title: "Success!",
+          description: "Virtual try-on completed successfully.",
+        });
+      } else if (data?.error) {
+        throw new Error(data.error);
+      }
+    } catch (error: any) {
+      console.error("Try-on error:", error);
+      toast({
+        title: "Error",
+        description: error.message || "Failed to process virtual try-on. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
       setIsProcessing(false);
-    }, 2000);
+    }
   };
 
   return (

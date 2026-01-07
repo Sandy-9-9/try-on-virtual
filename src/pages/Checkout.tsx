@@ -6,26 +6,108 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import Navbar from "@/components/Navbar";
 import { useCart } from "@/context/CartContext";
+import { useAuth } from "@/context/AuthContext";
+import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 
 const Checkout = () => {
   const navigate = useNavigate();
+  const { user } = useAuth();
   const { cartItems, getCartTotal, clearCart } = useCart();
   const [isProcessing, setIsProcessing] = useState(false);
   const [orderPlaced, setOrderPlaced] = useState(false);
+  const [formData, setFormData] = useState({
+    firstName: "",
+    lastName: "",
+    email: "",
+    address: "",
+    city: "",
+    pincode: "",
+    cardNumber: "",
+    expiry: "",
+    cvv: "",
+  });
 
-  const handlePayment = (e: React.FormEvent) => {
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setFormData({ ...formData, [e.target.id]: e.target.value });
+  };
+
+  const handlePayment = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!user) {
+      toast.error("Please login to complete checkout");
+      navigate("/login");
+      return;
+    }
+
     setIsProcessing(true);
     
-    // Simulate payment processing
-    setTimeout(() => {
-      setIsProcessing(false);
+    try {
+      // Create order
+      const { data: order, error: orderError } = await supabase
+        .from("orders")
+        .insert({
+          user_id: user.id,
+          total_amount: getCartTotal(),
+          shipping_address: formData.address,
+          city: formData.city,
+          pincode: formData.pincode,
+          status: "confirmed",
+        })
+        .select()
+        .single();
+
+      if (orderError) throw orderError;
+
+      // Create order items
+      const orderItems = cartItems.map((item) => ({
+        order_id: order.id,
+        product_id: item.product_id,
+        product_name: item.product_name,
+        product_price: item.product_price,
+        product_image: item.product_image,
+        quantity: item.quantity,
+      }));
+
+      const { error: itemsError } = await supabase
+        .from("order_items")
+        .insert(orderItems);
+
+      if (itemsError) throw itemsError;
+
+      // Clear cart
+      await clearCart();
+      
       setOrderPlaced(true);
-      clearCart();
       toast.success("Order placed successfully!");
-    }, 2000);
+    } catch (error) {
+      console.error("Checkout error:", error);
+      toast.error("Failed to place order. Please try again.");
+    } finally {
+      setIsProcessing(false);
+    }
   };
+
+  if (!user) {
+    return (
+      <div className="min-h-screen bg-background">
+        <Navbar />
+        <main className="pt-24 pb-16">
+          <div className="container mx-auto px-4 text-center">
+            <h1 className="text-3xl font-bold text-foreground mb-4">Please Login</h1>
+            <p className="text-muted-foreground mb-8">
+              You need to be logged in to checkout.
+            </p>
+            <Link to="/login">
+              <Button className="bg-primary text-primary-foreground hover:bg-primary/90">
+                Go to Login
+              </Button>
+            </Link>
+          </div>
+        </main>
+      </div>
+    );
+  }
 
   if (orderPlaced) {
     return (
@@ -77,32 +159,32 @@ const Checkout = () => {
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <Label htmlFor="firstName">First Name</Label>
-                    <Input id="firstName" placeholder="John" required />
+                    <Input id="firstName" placeholder="John" required value={formData.firstName} onChange={handleInputChange} />
                   </div>
                   <div>
                     <Label htmlFor="lastName">Last Name</Label>
-                    <Input id="lastName" placeholder="Doe" required />
+                    <Input id="lastName" placeholder="Doe" required value={formData.lastName} onChange={handleInputChange} />
                   </div>
                 </div>
 
                 <div>
                   <Label htmlFor="email">Email</Label>
-                  <Input id="email" type="email" placeholder="john@example.com" required />
+                  <Input id="email" type="email" placeholder="john@example.com" required value={formData.email} onChange={handleInputChange} />
                 </div>
 
                 <div>
                   <Label htmlFor="address">Shipping Address</Label>
-                  <Input id="address" placeholder="123 Main Street" required />
+                  <Input id="address" placeholder="123 Main Street" required value={formData.address} onChange={handleInputChange} />
                 </div>
 
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <Label htmlFor="city">City</Label>
-                    <Input id="city" placeholder="Mumbai" required />
+                    <Input id="city" placeholder="Mumbai" required value={formData.city} onChange={handleInputChange} />
                   </div>
                   <div>
                     <Label htmlFor="pincode">PIN Code</Label>
-                    <Input id="pincode" placeholder="400001" required />
+                    <Input id="pincode" placeholder="400001" required value={formData.pincode} onChange={handleInputChange} />
                   </div>
                 </div>
 
@@ -111,17 +193,17 @@ const Checkout = () => {
                   
                   <div>
                     <Label htmlFor="cardNumber">Card Number</Label>
-                    <Input id="cardNumber" placeholder="1234 5678 9012 3456" required />
+                    <Input id="cardNumber" placeholder="1234 5678 9012 3456" required value={formData.cardNumber} onChange={handleInputChange} />
                   </div>
 
                   <div className="grid grid-cols-2 gap-4 mt-4">
                     <div>
                       <Label htmlFor="expiry">Expiry Date</Label>
-                      <Input id="expiry" placeholder="MM/YY" required />
+                      <Input id="expiry" placeholder="MM/YY" required value={formData.expiry} onChange={handleInputChange} />
                     </div>
                     <div>
                       <Label htmlFor="cvv">CVV</Label>
-                      <Input id="cvv" type="password" placeholder="***" required />
+                      <Input id="cvv" type="password" placeholder="***" required value={formData.cvv} onChange={handleInputChange} />
                     </div>
                   </div>
                 </div>
@@ -144,15 +226,15 @@ const Checkout = () => {
                 {cartItems.map((item) => (
                   <div key={item.id} className="flex gap-3">
                     <img
-                      src={item.image}
-                      alt={item.name}
+                      src={item.product_image}
+                      alt={item.product_name}
                       className="w-16 h-20 object-cover rounded"
                     />
                     <div className="flex-1">
-                      <p className="font-medium text-card-foreground">{item.name}</p>
+                      <p className="font-medium text-card-foreground">{item.product_name}</p>
                       <p className="text-sm text-muted-foreground">Qty: {item.quantity}</p>
                     </div>
-                    <p className="font-semibold">₹{item.price * item.quantity}/-</p>
+                    <p className="font-semibold">₹{item.product_price * item.quantity}/-</p>
                   </div>
                 ))}
               </div>

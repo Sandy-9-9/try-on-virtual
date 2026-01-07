@@ -5,7 +5,7 @@ import Navbar from "@/components/Navbar";
 import { useCart } from "@/context/CartContext";
 
 const Cart = () => {
-  const { cartItems, removeFromCart, updateQuantity, getCartTotal, clearCart } = useCart();
+  const { cartItems, removeFromCart, updateQuantity, getCartTotal, clearCart, loading } = useCart();
 
   if (cartItems.length === 0) {
     return (
@@ -45,13 +45,13 @@ const Cart = () => {
                   className="flex gap-4 p-4 bg-card rounded-lg border border-border"
                 >
                   <img
-                    src={item.image}
-                    alt={item.name}
+                    src={item.product_image}
+                    alt={item.product_name}
                     className="w-24 h-32 object-cover rounded-md"
                   />
                   <div className="flex-1">
-                    <h3 className="font-semibold text-card-foreground">{item.name}</h3>
-                    <p className="text-lg font-bold text-primary mt-1">₹{item.price}/-</p>
+                    <h3 className="font-semibold text-card-foreground">{item.product_name}</h3>
+                    <p className="text-lg font-bold text-primary mt-1">₹{item.product_price}/-</p>
                     
                     {/* Quantity Controls */}
                     <div className="flex items-center gap-3 mt-4">

@@ -1,7 +1,8 @@
 import { Star, Heart, ShoppingCart, Sparkles } from "lucide-react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { useCart } from "@/context/CartContext";
 import { useWishlist } from "@/context/WishlistContext";
+import { useAuth } from "@/context/AuthContext";
 import { toast } from "sonner";
 
 interface ProductCardProps {
@@ -15,23 +16,36 @@ interface ProductCardProps {
 
 const ProductCard = ({ id, image, name, price, rating = 5, hasSale = true }: ProductCardProps) => {
   const { addToCart } = useCart();
-  const { addToWishlist, removeFromWishlist, isInWishlist } = useWishlist();
+  const { addToWishlist, removeFromWishlist, isInWishlist, wishlistItems } = useWishlist();
+  const { user } = useAuth();
+  const navigate = useNavigate();
 
   const inWishlist = isInWishlist(id);
+  const wishlistItem = wishlistItems.find(item => item.product_id === id);
 
-  const handleAddToCart = (e: React.MouseEvent) => {
+  const handleAddToCart = async (e: React.MouseEvent) => {
     e.stopPropagation();
-    addToCart({ id, name, price, image });
+    if (!user) {
+      toast.error("Please login to add items to cart");
+      navigate("/login");
+      return;
+    }
+    await addToCart({ product_id: id, product_name: name, product_price: price, product_image: image });
     toast.success(`${name} added to cart!`);
   };
 
-  const handleWishlistToggle = (e: React.MouseEvent) => {
+  const handleWishlistToggle = async (e: React.MouseEvent) => {
     e.stopPropagation();
-    if (inWishlist) {
-      removeFromWishlist(id);
+    if (!user) {
+      toast.error("Please login to add items to wishlist");
+      navigate("/login");
+      return;
+    }
+    if (inWishlist && wishlistItem) {
+      await removeFromWishlist(wishlistItem.id);
       toast.info(`${name} removed from wishlist`);
     } else {
-      addToWishlist({ id, name, price, image });
+      await addToWishlist({ product_id: id, product_name: name, product_price: price, product_image: image });
       toast.success(`${name} added to wishlist!`);
     }
   };
@@ -47,13 +61,13 @@ const ProductCard = ({ id, image, name, price, rating = 5, hasSale = true }: Pro
 
       {/* Image with overlay icons */}
       <div className="relative aspect-[3/4] overflow-hidden bg-muted">
-        <Link to="/cart" onClick={handleAddToCart}>
+        <div onClick={handleAddToCart} className="cursor-pointer">
           <img
             src={image}
             alt={name}
-            className="w-full h-full object-cover object-center group-hover:scale-105 transition-transform duration-300 cursor-pointer"
+            className="w-full h-full object-cover object-center group-hover:scale-105 transition-transform duration-300"
           />
-        </Link>
+        </div>
 
         {/* Hover Action Icons */}
         <div className="absolute inset-0 bg-foreground/0 group-hover:bg-foreground/10 transition-colors flex items-center justify-center gap-3 opacity-0 group-hover:opacity-100">

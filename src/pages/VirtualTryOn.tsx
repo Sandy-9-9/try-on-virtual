@@ -1,15 +1,27 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { Upload, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Link } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { Progress } from "@/components/ui/progress";
+
+const loadingMessages = [
+  "Analyzing clothing details...",
+  "Mapping body proportions...",
+  "Adjusting fabric draping...",
+  "Applying realistic shadows...",
+  "Refining lighting effects...",
+  "Generating final result...",
+];
 
 const VirtualTryOn = () => {
   const [clothImage, setClothImage] = useState<string | null>(null);
   const [modelImage, setModelImage] = useState<string | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [result, setResult] = useState<string | null>(null);
+  const [progress, setProgress] = useState(0);
+  const [loadingMessage, setLoadingMessage] = useState(loadingMessages[0]);
   const { toast } = useToast();
   
   const clothInputRef = useRef<HTMLInputElement>(null);
@@ -29,11 +41,42 @@ const VirtualTryOn = () => {
     }
   };
 
+  // Progress animation effect
+  useEffect(() => {
+    if (!isProcessing) {
+      setProgress(0);
+      setLoadingMessage(loadingMessages[0]);
+      return;
+    }
+
+    const progressInterval = setInterval(() => {
+      setProgress((prev) => {
+        if (prev >= 95) return prev;
+        const increment = Math.random() * 8 + 2;
+        return Math.min(prev + increment, 95);
+      });
+    }, 500);
+
+    const messageInterval = setInterval(() => {
+      setLoadingMessage((prev) => {
+        const currentIndex = loadingMessages.indexOf(prev);
+        const nextIndex = (currentIndex + 1) % loadingMessages.length;
+        return loadingMessages[nextIndex];
+      });
+    }, 2500);
+
+    return () => {
+      clearInterval(progressInterval);
+      clearInterval(messageInterval);
+    };
+  }, [isProcessing]);
+
   const handleTryOn = async () => {
     if (!clothImage || !modelImage) return;
     
     setIsProcessing(true);
     setResult(null);
+    setProgress(0);
 
     try {
       const { data, error } = await supabase.functions.invoke('virtual-tryon', {
@@ -42,6 +85,8 @@ const VirtualTryOn = () => {
 
       if (error) throw error;
 
+      setProgress(100);
+      
       if (data?.image) {
         setResult(data.image);
         toast({
@@ -177,15 +222,50 @@ const VirtualTryOn = () => {
           HERE IS YOUR RESULT
         </h2>
         
-        {result ? (
-          <div className="bg-[hsl(210_11%_20%)] rounded-lg p-8">
+        {isProcessing ? (
+          <div className="bg-[hsl(210_11%_20%)] rounded-lg p-8 animate-fade-in">
+            <div className="flex flex-col items-center gap-6">
+              {/* Animated sparkles */}
+              <div className="relative w-24 h-24">
+                <div className="absolute inset-0 flex items-center justify-center">
+                  <Sparkles className="w-12 h-12 text-primary animate-pulse" />
+                </div>
+                <div className="absolute inset-0 animate-spin" style={{ animationDuration: '3s' }}>
+                  <Sparkles className="w-6 h-6 text-primary/50 absolute top-0 left-1/2 -translate-x-1/2" />
+                  <Sparkles className="w-6 h-6 text-primary/50 absolute bottom-0 left-1/2 -translate-x-1/2" />
+                  <Sparkles className="w-6 h-6 text-primary/50 absolute left-0 top-1/2 -translate-y-1/2" />
+                  <Sparkles className="w-6 h-6 text-primary/50 absolute right-0 top-1/2 -translate-y-1/2" />
+                </div>
+              </div>
+              
+              {/* Loading message */}
+              <p className="text-[hsl(0_0%_70%)] text-lg font-medium animate-pulse">
+                {loadingMessage}
+              </p>
+              
+              {/* Progress bar */}
+              <div className="w-full max-w-md space-y-2">
+                <Progress value={progress} className="h-2" />
+                <p className="text-[hsl(0_0%_50%)] text-sm">
+                  {Math.round(progress)}% complete
+                </p>
+              </div>
+              
+              {/* Tip */}
+              <p className="text-[hsl(0_0%_40%)] text-xs mt-4">
+                AI is generating your virtual try-on. This may take a moment...
+              </p>
+            </div>
+          </div>
+        ) : result ? (
+          <div className="bg-[hsl(210_11%_20%)] rounded-lg p-8 animate-fade-in">
             <img
               src={result}
               alt="Try-on result"
               className="max-h-96 mx-auto rounded-lg shadow-lg"
             />
             <p className="mt-4 text-[hsl(0_0%_60%)] text-sm">
-              Virtual try-on preview (demo)
+              Virtual try-on preview
             </p>
           </div>
         ) : (

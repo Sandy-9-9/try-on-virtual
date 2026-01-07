@@ -1,7 +1,11 @@
-import { Star } from "lucide-react";
+import { Star, Heart, ShoppingCart, Sparkles } from "lucide-react";
 import { Link } from "react-router-dom";
+import { useCart } from "@/context/CartContext";
+import { useWishlist } from "@/context/WishlistContext";
+import { toast } from "sonner";
 
 interface ProductCardProps {
+  id: number;
   image: string;
   name: string;
   price: number;
@@ -9,7 +13,29 @@ interface ProductCardProps {
   hasSale?: boolean;
 }
 
-const ProductCard = ({ image, name, price, rating = 5, hasSale = true }: ProductCardProps) => {
+const ProductCard = ({ id, image, name, price, rating = 5, hasSale = true }: ProductCardProps) => {
+  const { addToCart } = useCart();
+  const { addToWishlist, removeFromWishlist, isInWishlist } = useWishlist();
+
+  const inWishlist = isInWishlist(id);
+
+  const handleAddToCart = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    addToCart({ id, name, price, image });
+    toast.success(`${name} added to cart!`);
+  };
+
+  const handleWishlistToggle = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (inWishlist) {
+      removeFromWishlist(id);
+      toast.info(`${name} removed from wishlist`);
+    } else {
+      addToWishlist({ id, name, price, image });
+      toast.success(`${name} added to wishlist!`);
+    }
+  };
+
   return (
     <div className="group relative bg-card rounded-lg overflow-hidden shadow-sm hover:shadow-lg transition-shadow">
       {/* Sale Badge */}
@@ -19,13 +45,50 @@ const ProductCard = ({ image, name, price, rating = 5, hasSale = true }: Product
         </span>
       )}
 
-      {/* Image */}
-      <div className="aspect-[3/4] overflow-hidden bg-muted">
-        <img
-          src={image}
-          alt={name}
-          className="w-full h-full object-cover object-center group-hover:scale-105 transition-transform duration-300"
-        />
+      {/* Image with overlay icons */}
+      <div className="relative aspect-[3/4] overflow-hidden bg-muted">
+        <Link to="/cart" onClick={handleAddToCart}>
+          <img
+            src={image}
+            alt={name}
+            className="w-full h-full object-cover object-center group-hover:scale-105 transition-transform duration-300 cursor-pointer"
+          />
+        </Link>
+
+        {/* Hover Action Icons */}
+        <div className="absolute inset-0 bg-foreground/0 group-hover:bg-foreground/10 transition-colors flex items-center justify-center gap-3 opacity-0 group-hover:opacity-100">
+          {/* Add to Cart */}
+          <button
+            onClick={handleAddToCart}
+            className="p-3 bg-background rounded-full shadow-lg hover:bg-primary hover:text-primary-foreground transition-colors"
+            title="Add to Cart"
+          >
+            <ShoppingCart className="h-5 w-5" />
+          </button>
+
+          {/* Wishlist */}
+          <button
+            onClick={handleWishlistToggle}
+            className={`p-3 rounded-full shadow-lg transition-colors ${
+              inWishlist
+                ? "bg-pink text-accent-foreground"
+                : "bg-background hover:bg-pink hover:text-accent-foreground"
+            }`}
+            title={inWishlist ? "Remove from Wishlist" : "Add to Wishlist"}
+          >
+            <Heart className={`h-5 w-5 ${inWishlist ? "fill-current" : ""}`} />
+          </button>
+
+          {/* Try-On */}
+          <Link
+            to="/try-on"
+            onClick={(e) => e.stopPropagation()}
+            className="p-3 bg-background rounded-full shadow-lg hover:bg-purple hover:text-primary-foreground transition-colors"
+            title="Virtual Try-On"
+          >
+            <Sparkles className="h-5 w-5" />
+          </Link>
+        </div>
       </div>
 
       {/* Content */}
@@ -43,13 +106,21 @@ const ProductCard = ({ image, name, price, rating = 5, hasSale = true }: Product
         {/* Price */}
         <p className="text-lg font-bold text-card-foreground mb-3">{price}/-</p>
 
-        {/* Try-On Button */}
-        <Link
-          to="/try-on"
-          className="inline-block text-sm font-semibold text-card-foreground hover:text-primary transition-colors underline underline-offset-4"
-        >
-          Try-On Now
-        </Link>
+        {/* Action Buttons */}
+        <div className="flex items-center justify-center gap-2">
+          <button
+            onClick={handleAddToCart}
+            className="flex-1 py-2 px-3 bg-primary text-primary-foreground text-sm font-medium rounded-md hover:bg-primary/90 transition-colors"
+          >
+            Add to Cart
+          </button>
+          <Link
+            to="/try-on"
+            className="py-2 px-3 border border-primary text-primary text-sm font-medium rounded-md hover:bg-primary hover:text-primary-foreground transition-colors"
+          >
+            Try-On
+          </Link>
+        </div>
       </div>
     </div>
   );

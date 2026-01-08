@@ -32,27 +32,28 @@ serve(async (req) => {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "google/gemini-2.5-flash-image-preview",
+        model: "google/gemini-3-pro-image-preview",
         messages: [
           {
             role: "user",
             content: [
               {
                 type: "text",
-                text: "Generate a photorealistic image of the person in the second image wearing the clothing from the first image. IMPORTANT: Do NOT overlay or paste the clothing. Instead, render the person's body naturally wearing this garment - the clothing should conform to their body shape, posture, and proportions. Replace their current outfit entirely. Match the lighting, shadows, and fabric draping realistically as if photographed while wearing it. The final image should look like an authentic fashion photo of this person in this outfit."
+                text:
+                  "Create a NEW photorealistic fashion photo of the person in the SECOND image wearing the clothing from the FIRST image. IMPORTANT: Do NOT overlay, paste, or copy pixels from either input image. The output MUST be a newly generated image (not the original model photo, and not the original clothing photo). Replace the person's current outfit entirely. The garment must conform naturally to the body shape, posture, and proportions with realistic fabric drape, lighting, and shadows. Preserve the person's identity (face, hair, skin tone) and keep the scene photographic and coherent.",
               },
               {
                 type: "image_url",
-                image_url: { url: clothImage }
+                image_url: { url: clothImage },
               },
               {
                 type: "image_url",
-                image_url: { url: modelImage }
-              }
-            ]
-          }
+                image_url: { url: modelImage },
+              },
+            ],
+          },
         ],
-        modalities: ["image", "text"]
+        modalities: ["image", "text"],
       }),
     });
 
@@ -79,6 +80,20 @@ serve(async (req) => {
 
     const data = await response.json();
     const generatedImage = data.choices?.[0]?.message?.images?.[0]?.image_url?.url;
+
+    // The model sometimes echoes an input image for complex cases; treat that as a failure.
+    if (generatedImage === clothImage || generatedImage === modelImage) {
+      console.warn("Try-on generation returned an input image (echo).", {
+        generatedPrefix: generatedImage?.slice?.(0, 32),
+      });
+      return new Response(
+        JSON.stringify({
+          error:
+            "Try-on failed (the AI returned one of the input images). Please try a simpler garment photo (clear front view, plain background) or a different model photo.",
+        }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
 
     if (!generatedImage) {
       return new Response(

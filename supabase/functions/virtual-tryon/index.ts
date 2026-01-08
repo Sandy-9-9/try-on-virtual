@@ -40,15 +40,15 @@ serve(async (req) => {
               {
                 type: "text",
                 text:
-                  "Create a NEW photorealistic fashion photo of the person in the SECOND image wearing the clothing from the FIRST image. IMPORTANT: Do NOT overlay, paste, or copy pixels from either input image. The output MUST be a newly generated image (not the original model photo, and not the original clothing photo). Replace the person's current outfit entirely. The garment must conform naturally to the body shape, posture, and proportions with realistic fabric drape, lighting, and shadows. Preserve the person's identity (face, hair, skin tone) and keep the scene photographic and coherent.",
-              },
-              {
-                type: "image_url",
-                image_url: { url: clothImage },
+                  "Create a NEW photorealistic fashion photo of the person in the FIRST image wearing the clothing item from the SECOND image. IMPORTANT: Do NOT overlay, paste, or copy pixels from either input image. The output MUST be a newly generated image (not the original person photo and not the original clothing photo). Preserve the person's identity (face, hair, skin tone) and keep the background/lighting consistent with the FIRST image. Replace the person's current outfit entirely. The garment must fit naturally to the body with realistic fabric drape, folds, shadows, and correct perspective.",
               },
               {
                 type: "image_url",
                 image_url: { url: modelImage },
+              },
+              {
+                type: "image_url",
+                image_url: { url: clothImage },
               },
             ],
           },

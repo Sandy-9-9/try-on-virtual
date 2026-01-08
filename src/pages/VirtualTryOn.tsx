@@ -88,6 +88,11 @@ const VirtualTryOn = () => {
       setProgress(100);
       
       if (data?.image) {
+        if (data.image === clothImage || data.image === modelImage) {
+          throw new Error(
+            "Try-on failed (the AI returned an input image). Please try a clearer garment photo or a different model photo."
+          );
+        }
         setResult(data.image);
         toast({
           title: "Success!",

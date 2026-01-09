@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { CreditCard, Check } from "lucide-react";
+import { ShoppingBag, Check, Shield } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -23,9 +23,6 @@ const Checkout = () => {
     address: "",
     city: "",
     pincode: "",
-    cardNumber: "",
-    expiry: "",
-    cvv: "",
   });
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -43,7 +40,7 @@ const Checkout = () => {
     setIsProcessing(true);
     
     try {
-      // Create order
+      // Create order with Cash on Delivery / Demo payment
       const { data: order, error: orderError } = await supabase
         .from("orders")
         .insert({
@@ -81,7 +78,8 @@ const Checkout = () => {
       setOrderPlaced(true);
       toast.success("Order placed successfully!");
     } catch (error) {
-      console.error("Checkout error:", error);
+      // Log only non-sensitive error info for debugging
+      console.error("Order placement failed");
       toast.error("Failed to place order. Please try again.");
     } finally {
       setIsProcessing(false);
@@ -148,11 +146,11 @@ const Checkout = () => {
           <h1 className="text-3xl font-bold text-foreground mb-8">Checkout</h1>
 
           <div className="grid lg:grid-cols-2 gap-8">
-            {/* Payment Form */}
+            {/* Shipping Form */}
             <div className="bg-card rounded-lg border border-border p-6">
               <h2 className="text-xl font-bold text-card-foreground mb-6 flex items-center gap-2">
-                <CreditCard className="h-5 w-5" />
-                Payment Details
+                <ShoppingBag className="h-5 w-5" />
+                Shipping Details
               </h2>
 
               <form onSubmit={handlePayment} className="space-y-4">
@@ -188,24 +186,29 @@ const Checkout = () => {
                   </div>
                 </div>
 
+                {/* Payment Method Info */}
                 <div className="border-t border-border pt-4 mt-6">
-                  <h3 className="font-semibold mb-4">Card Information</h3>
+                  <h3 className="font-semibold mb-4 flex items-center gap-2">
+                    <Shield className="h-4 w-4 text-green-600" />
+                    Payment Method
+                  </h3>
                   
-                  <div>
-                    <Label htmlFor="cardNumber">Card Number</Label>
-                    <Input id="cardNumber" placeholder="1234 5678 9012 3456" required value={formData.cardNumber} onChange={handleInputChange} />
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-4 mt-4">
-                    <div>
-                      <Label htmlFor="expiry">Expiry Date</Label>
-                      <Input id="expiry" placeholder="MM/YY" required value={formData.expiry} onChange={handleInputChange} />
-                    </div>
-                    <div>
-                      <Label htmlFor="cvv">CVV</Label>
-                      <Input id="cvv" type="password" placeholder="***" required value={formData.cvv} onChange={handleInputChange} />
+                  <div className="bg-muted/50 rounded-lg p-4">
+                    <div className="flex items-center gap-3">
+                      <div className="w-4 h-4 rounded-full border-2 border-primary bg-primary flex items-center justify-center">
+                        <div className="w-2 h-2 rounded-full bg-white" />
+                      </div>
+                      <div>
+                        <p className="font-medium text-card-foreground">Cash on Delivery</p>
+                        <p className="text-sm text-muted-foreground">Pay when your order arrives</p>
+                      </div>
                     </div>
                   </div>
+                  
+                  <p className="text-xs text-muted-foreground mt-3 flex items-center gap-1">
+                    <Shield className="h-3 w-3" />
+                    Your order details are securely stored
+                  </p>
                 </div>
 
                 <Button
@@ -213,7 +216,7 @@ const Checkout = () => {
                   disabled={isProcessing}
                   className="w-full bg-primary text-primary-foreground hover:bg-primary/90 mt-6"
                 >
-                  {isProcessing ? "Processing..." : `Pay ₹${getCartTotal()}/-`}
+                  {isProcessing ? "Processing..." : `Place Order - ₹${getCartTotal()}/-`}
                 </Button>
               </form>
             </div>

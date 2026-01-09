@@ -20,10 +20,11 @@ const VirtualTryOn = () => {
   const [modelImage, setModelImage] = useState<string | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [result, setResult] = useState<string | null>(null);
+  const [lastError, setLastError] = useState<string | null>(null);
   const [progress, setProgress] = useState(0);
   const [loadingMessage, setLoadingMessage] = useState(loadingMessages[0]);
   const { toast } = useToast();
-  
+
   const clothInputRef = useRef<HTMLInputElement>(null);
   const modelInputRef = useRef<HTMLInputElement>(null);
 
@@ -73,20 +74,21 @@ const VirtualTryOn = () => {
 
   const handleTryOn = async () => {
     if (!clothImage || !modelImage) return;
-    
+
     setIsProcessing(true);
     setResult(null);
+    setLastError(null);
     setProgress(0);
 
     try {
-      const { data, error } = await supabase.functions.invoke('virtual-tryon', {
-        body: { clothImage, modelImage }
+      const { data, error } = await supabase.functions.invoke("virtual-tryon", {
+        body: { clothImage, modelImage },
       });
 
       if (error) throw error;
 
       setProgress(100);
-      
+
       if (data?.image) {
         if (data.image === clothImage || data.image === modelImage) {
           throw new Error(
@@ -100,12 +102,37 @@ const VirtualTryOn = () => {
         });
       } else if (data?.error) {
         throw new Error(data.error);
+      } else {
+        throw new Error("No image was generated. Please try again.");
       }
     } catch (error: any) {
-      console.error("Try-on error:", error);
+      const status = error?.context?.status ?? error?.status;
+
+      // Try to extract backend error message body (often JSON)
+      let backendMsg: string | undefined;
+      const bodyText = error?.context?.body;
+      if (typeof bodyText === "string") {
+        try {
+          const parsed = JSON.parse(bodyText);
+          if (typeof parsed?.error === "string") backendMsg = parsed.error;
+        } catch {
+          // ignore
+        }
+      }
+
+      const message =
+        status === 402
+          ? "AI credits have run out for this workspace. Add credits in Settings → Workspace → Usage, then try again."
+          : status === 429
+            ? "Too many requests right now. Please wait a minute and try again."
+            : backendMsg || error?.message || "Failed to process virtual try-on. Please try again.";
+
+      console.error("Try-on error:", { status, message });
+      setLastError(message);
+
       toast({
         title: "Error",
-        description: error.message || "Failed to process virtual try-on. Please try again.",
+        description: message,
         variant: "destructive",
       });
     } finally {
@@ -271,6 +298,14 @@ const VirtualTryOn = () => {
             />
             <p className="mt-4 text-[hsl(0_0%_60%)] text-sm">
               Virtual try-on preview
+            </p>
+          </div>
+        ) : lastError ? (
+          <div className="bg-[hsl(210_11%_20%)] rounded-lg p-8 animate-fade-in">
+            <p className="text-[hsl(0_0%_80%)] font-medium">Could not generate a result</p>
+            <p className="mt-2 text-[hsl(0_0%_60%)] text-sm">{lastError}</p>
+            <p className="mt-4 text-[hsl(0_0%_50%)] text-xs">
+              Tip: If you just added credits, refresh the page and try again.
             </p>
           </div>
         ) : (

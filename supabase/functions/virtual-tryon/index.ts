@@ -63,8 +63,9 @@ async function callGeminiDirect(
   const modelImageData = extractBase64(modelImage);
   const clothImageData = extractBase64(clothImage);
 
+  // Use the paid model (gemini-2.0-flash) to avoid free-tier quota limits
   const response = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp-image-generation:generateContent?key=${apiKey}`,
+    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },

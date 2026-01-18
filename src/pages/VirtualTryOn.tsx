@@ -5,6 +5,7 @@ import { Link } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { Progress } from "@/components/ui/progress";
+import { QuickTryOnOverlay } from "@/components/QuickTryOnOverlay";
 
 const loadingMessages = [
   "Analyzing clothing details...",
@@ -21,6 +22,7 @@ const VirtualTryOn = () => {
   const [isProcessing, setIsProcessing] = useState(false);
   const [result, setResult] = useState<string | null>(null);
   const [lastError, setLastError] = useState<string | null>(null);
+  const [quickMode, setQuickMode] = useState(false);
   const [progress, setProgress] = useState(0);
   const [loadingMessage, setLoadingMessage] = useState(loadingMessages[0]);
   const { toast } = useToast();
@@ -78,6 +80,7 @@ const VirtualTryOn = () => {
     setIsProcessing(true);
     setResult(null);
     setLastError(null);
+    setQuickMode(false);
     setProgress(0);
 
     try {
@@ -124,19 +127,34 @@ const VirtualTryOn = () => {
 
       const retryHint = retryAfterSeconds ? ` Try again in ~${retryAfterSeconds}s.` : "";
 
+      const isQuotaOrCredits =
+        status === 402 ||
+        (typeof backendMsg === "string" &&
+          (backendMsg.includes("payment_required") ||
+            backendMsg.toLowerCase().includes("not enough credits") ||
+            backendMsg.includes("limit is 0") ||
+            backendMsg.toLowerCase().includes("quota")));
+
       const message =
-        status === 402
-          ? (backendMsg || "AI provider is temporarily unavailable. Please try again.")
-          : status === 429
-            ? (backendMsg ? `${backendMsg}${retryHint}` : `Too many requests right now. Please wait a minute and try again.${retryHint}`)
-            : backendMsg || error?.message || "Failed to process virtual try-on. Please try again.";
+        status === 429
+          ? (backendMsg ? `${backendMsg}${retryHint}` : `Too many requests right now. Please wait a minute and try again.${retryHint}`)
+          : backendMsg || error?.message || "Failed to process virtual try-on. Please try again.";
+
+      // If AI is unavailable (credits/quota), switch to Quick Try-On mode (no AI).
+      if (isQuotaOrCredits && clothImage && modelImage) {
+        setQuickMode(true);
+      }
 
       console.error("Try-on error:", { status, message });
-      setLastError(message);
+      setLastError(
+        isQuotaOrCredits
+          ? "AI is unavailable right now. Switching to Quick Try-On (overlay) mode so you can continue immediately."
+          : message
+      );
 
       toast({
         title: "Error",
-        description: message,
+        description: isQuotaOrCredits ? "AI unavailable — opened Quick Try-On mode." : message,
         variant: "destructive",
       });
     } finally {
@@ -308,9 +326,16 @@ const VirtualTryOn = () => {
           <div className="bg-[hsl(210_11%_20%)] rounded-lg p-8 animate-fade-in">
             <p className="text-[hsl(0_0%_80%)] font-medium">Could not generate a result</p>
             <p className="mt-2 text-[hsl(0_0%_60%)] text-sm">{lastError}</p>
-            <p className="mt-4 text-[hsl(0_0%_50%)] text-xs">
-              Tip: If you just added credits, refresh the page and try again.
-            </p>
+
+            {quickMode && clothImage && modelImage ? (
+              <div className="mt-6 text-left">
+                <QuickTryOnOverlay modelImage={modelImage} clothImage={clothImage} />
+              </div>
+            ) : (
+              <p className="mt-4 text-[hsl(0_0%_50%)] text-xs">
+                Tip: If you just added credits, refresh the page and try again.
+              </p>
+            )}
           </div>
         ) : (
           <div className="bg-[hsl(210_11%_20%)] rounded-lg p-12 text-[hsl(0_0%_50%)]">

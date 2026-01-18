@@ -26,6 +26,35 @@ function extractBase64(dataUrl: string) {
   return { mime_type: match[1], data: match[2] };
 }
 
+function arrayBufferToBase64(buf: ArrayBuffer) {
+  const bytes = new Uint8Array(buf);
+  const chunkSize = 0x8000;
+  let binary = "";
+  for (let i = 0; i < bytes.length; i += chunkSize) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + chunkSize));
+  }
+  return btoa(binary);
+}
+
+async function toInlineData(input: string): Promise<{ mime_type: string; data: string }> {
+  if (isDataUrl(input)) return extractBase64(input);
+
+  if (/^https?:\/\//.test(input)) {
+    const res = await fetch(input);
+    if (!res.ok) {
+      throw new Error(`Failed to fetch image URL (${res.status}).`);
+    }
+
+    const mime_type = (res.headers.get("content-type") || "image/jpeg").split(";")[0];
+    const buf = await res.arrayBuffer();
+    const data = arrayBufferToBase64(buf);
+
+    return { mime_type, data };
+  }
+
+  throw new Error("Unsupported image format. Provide a data URL or an https URL.");
+}
+
 async function callLovableGateway(apiKey: string, modelImage: string, clothImage: string): Promise<TryOnResult> {
   const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
     method: "POST",
@@ -68,24 +97,20 @@ async function callLovableGateway(apiKey: string, modelImage: string, clothImage
 
 async function callGeminiDirect(apiKey: string, modelImage: string, clothImage: string): Promise<TryOnResult> {
   // This path does NOT depend on workspace credits. It uses the user's key.
-  // Requires base64 data URLs.
-  if (!isDataUrl(modelImage) || !isDataUrl(clothImage)) {
-    return {
-      status: 400,
-      kind: "bad_request",
-      error: "Direct AI fallback requires base64 data URLs for both images.",
-    };
-  }
+  // Supports BOTH base64 data URLs and https URLs.
+
+  console.log("Trying direct AI fallback using user key...");
 
   let modelImageData;
   let clothImageData;
   try {
-    modelImageData = extractBase64(modelImage);
-    clothImageData = extractBase64(clothImage);
+    modelImageData = await toInlineData(modelImage);
+    clothImageData = await toInlineData(clothImage);
   } catch (e) {
-    return { status: 400, kind: "bad_request", error: e instanceof Error ? e.message : "Invalid image data" };
+    const msg = e instanceof Error ? e.message : "Invalid image input";
+    console.error("Direct fallback input error:", msg);
+    return { status: 400, kind: "bad_request", error: msg };
   }
-
   const response = await fetch(
     "https://generativelanguage.googleapis.com/v1beta/models/gemini-3-pro-image-preview:generateContent",
     {

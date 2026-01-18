@@ -110,21 +110,25 @@ const VirtualTryOn = () => {
 
       // Try to extract backend error message body (often JSON)
       let backendMsg: string | undefined;
+      let retryAfterSeconds: number | undefined;
       const bodyText = error?.context?.body;
       if (typeof bodyText === "string") {
         try {
           const parsed = JSON.parse(bodyText);
           if (typeof parsed?.error === "string") backendMsg = parsed.error;
+          if (typeof parsed?.retryAfterSeconds === "number") retryAfterSeconds = parsed.retryAfterSeconds;
         } catch {
           // ignore
         }
       }
 
+      const retryHint = retryAfterSeconds ? ` Try again in ~${retryAfterSeconds}s.` : "";
+
       const message =
         status === 402
           ? "AI credits have run out for this workspace. Add credits in Settings → Workspace → Usage, then try again."
           : status === 429
-            ? "Too many requests right now. Please wait a minute and try again."
+            ? (backendMsg ? `${backendMsg}${retryHint}` : `Too many requests right now. Please wait a minute and try again.${retryHint}`)
             : backendMsg || error?.message || "Failed to process virtual try-on. Please try again.";
 
       console.error("Try-on error:", { status, message });

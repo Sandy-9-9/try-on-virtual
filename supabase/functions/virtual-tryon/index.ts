@@ -50,7 +50,13 @@ async function callGeminiDirect(
   apiKey: string,
   modelImage: string,
   clothImage: string
-): Promise<{ image?: string; status?: number; error?: string }> {
+): Promise<{
+  image?: string;
+  status?: number;
+  error?: string;
+  retryAfterSeconds?: number;
+  kind?: string;
+}> {
   console.log("Attempting fallback to direct Gemini API...");
 
   // Convert data URLs to inline_data format for Gemini
@@ -103,15 +109,44 @@ async function callGeminiDirect(
 
     // Try to extract a helpful message from JSON
     let msg = `Gemini API error: ${response.status}`;
+    let retryAfterSeconds: number | undefined;
+    let kind: string | undefined;
+
     try {
       const parsed = JSON.parse(errorText);
       const apiMsg = parsed?.error?.message;
-      if (typeof apiMsg === "string" && apiMsg.trim()) msg = apiMsg;
+      const details = parsed?.error?.details;
+
+      // Extract retry delay (e.g. "13s")
+      if (Array.isArray(details)) {
+        const retryInfo = details.find(
+          (d: any) => d?.["@type"] === "type.googleapis.com/google.rpc.RetryInfo"
+        );
+        const retryDelay = retryInfo?.retryDelay;
+        if (typeof retryDelay === "string") {
+          const m = retryDelay.match(/(\d+)s/);
+          if (m) retryAfterSeconds = Number(m[1]);
+        }
+      }
+
+      if (typeof apiMsg === "string" && apiMsg.trim()) {
+        // Detect the common "free tier limit: 0" case (this will never succeed until billing is enabled)
+        const isFreeTierZero =
+          apiMsg.includes("free_tier") && apiMsg.includes("limit: 0");
+
+        if (isFreeTierZero) {
+          kind = "quota";
+          msg =
+            "Your Gemini API key has no free-tier quota for image generation (limit is 0). Enable billing for the key and update GEMINI_API_KEY, then try again.";
+        } else {
+          msg = apiMsg;
+        }
+      }
     } catch {
       // ignore
     }
 
-    return { status: response.status, error: msg };
+    return { status: response.status, error: msg, retryAfterSeconds, kind };
   }
 
   const data = await response.json();
@@ -171,11 +206,22 @@ serve(async (req) => {
           if (fallbackResult.image) {
             generatedImage = fallbackResult.image;
           } else if (fallbackResult.error) {
+            const headers: Record<string, string> = {
+              ...corsHeaders,
+              "Content-Type": "application/json",
+            };
+            if (fallbackResult.retryAfterSeconds) {
+              headers["Retry-After"] = String(fallbackResult.retryAfterSeconds);
+            }
+
             return new Response(
-              JSON.stringify({ error: fallbackResult.error }),
+              JSON.stringify({
+                error: fallbackResult.error,
+                retryAfterSeconds: fallbackResult.retryAfterSeconds,
+              }),
               {
                 status: fallbackResult.status ?? 500,
-                headers: { ...corsHeaders, "Content-Type": "application/json" },
+                headers,
               }
             );
           }
@@ -203,11 +249,22 @@ serve(async (req) => {
       if (result.image) {
         generatedImage = result.image;
       } else {
+        const headers: Record<string, string> = {
+          ...corsHeaders,
+          "Content-Type": "application/json",
+        };
+        if (result.retryAfterSeconds) {
+          headers["Retry-After"] = String(result.retryAfterSeconds);
+        }
+
         return new Response(
-          JSON.stringify({ error: result.error || "Failed to generate image" }),
+          JSON.stringify({
+            error: result.error || "Failed to generate image",
+            retryAfterSeconds: result.retryAfterSeconds,
+          }),
           {
             status: result.status ?? 500,
-            headers: { ...corsHeaders, "Content-Type": "application/json" },
+            headers,
           }
         );
       }

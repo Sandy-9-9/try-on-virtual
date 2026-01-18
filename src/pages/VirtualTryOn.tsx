@@ -126,7 +126,7 @@ const VirtualTryOn = () => {
 
       const message =
         status === 402
-          ? "AI credits have run out for this workspace. Add credits in Settings → Workspace → Usage, then try again."
+          ? (backendMsg || "AI provider is temporarily unavailable. Please try again.")
           : status === 429
             ? (backendMsg ? `${backendMsg}${retryHint}` : `Too many requests right now. Please wait a minute and try again.${retryHint}`)
             : backendMsg || error?.message || "Failed to process virtual try-on. Please try again.";

@@ -135,26 +135,25 @@ const VirtualTryOn = () => {
             backendMsg.includes("limit is 0") ||
             backendMsg.toLowerCase().includes("quota")));
 
+      // If AI is unavailable (credits/quota/rate-limit), switch to Quick Try-On mode (no AI).
+      const shouldQuickMode = (status === 402 || status === 429 || isQuotaOrCredits) && clothImage && modelImage;
+      if (shouldQuickMode) setQuickMode(true);
+
       const message =
         status === 429
-          ? (backendMsg ? `${backendMsg}${retryHint}` : `Too many requests right now. Please wait a minute and try again.${retryHint}`)
+          ? (backendMsg ? `${backendMsg}${retryHint}` : `Too many requests right now. Switching to Quick Try-On mode.${retryHint}`)
           : backendMsg || error?.message || "Failed to process virtual try-on. Please try again.";
-
-      // If AI is unavailable (credits/quota), switch to Quick Try-On mode (no AI).
-      if (isQuotaOrCredits && clothImage && modelImage) {
-        setQuickMode(true);
-      }
 
       console.error("Try-on error:", { status, message });
       setLastError(
-        isQuotaOrCredits
-          ? "AI is unavailable right now. Switching to Quick Try-On (overlay) mode so you can continue immediately."
+        shouldQuickMode
+          ? "AI is unavailable right now. Quick Try-On mode is enabled below — warp the garment with the 4 dots for a better fit."
           : message
       );
 
       toast({
         title: "Error",
-        description: isQuotaOrCredits ? "AI unavailable — opened Quick Try-On mode." : message,
+        description: shouldQuickMode ? "AI unavailable — opened Quick Try-On mode." : message,
         variant: "destructive",
       });
     } finally {

@@ -9,10 +9,21 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { drawImageWarpedToQuad, pointInQuad, type Point, type WarpCompositeMode } from "@/lib/image-warp";
+import { MODEL_PRESETS, type BodyType } from "@/components/ModelGallery";
+import { Wand2 } from "lucide-react";
+
+export interface QuadPreset {
+  cx: number;
+  cy: number;
+  wRatio: number;
+  hRatio: number;
+}
 
 type Props = {
   modelImage: string;
   clothImage: string;
+  /** Body type preset for auto-fit warp */
+  bodyType?: BodyType | null;
 };
 
 type DragState =
@@ -28,7 +39,23 @@ function copyQuad(q: [Point, Point, Point, Point]): [Point, Point, Point, Point]
   return q.map((p) => ({ x: p.x, y: p.y })) as any;
 }
 
-export function QuickTryOnOverlay({ modelImage, clothImage }: Props) {
+function quadFromPreset(preset: QuadPreset, w: number, h: number): [Point, Point, Point, Point] {
+  const cx = w * preset.cx;
+  const cy = h * preset.cy;
+  const bw = w * preset.wRatio;
+  const bh = h * preset.hRatio;
+
+  return [
+    { x: cx - bw / 2, y: cy - bh / 2 },
+    { x: cx + bw / 2, y: cy - bh / 2 },
+    { x: cx + bw / 2, y: cy + bh / 2 },
+    { x: cx - bw / 2, y: cy + bh / 2 },
+  ];
+}
+
+const DEFAULT_PRESET: QuadPreset = { cx: 0.5, cy: 0.45, wRatio: 0.42, hRatio: 0.48 };
+
+export function QuickTryOnOverlay({ modelImage, clothImage, bodyType }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
@@ -46,20 +73,27 @@ export function QuickTryOnOverlay({ modelImage, clothImage }: Props) {
     { x: 0, y: 0 },
   ]);
 
-  const defaultQuadForSize = useCallback((w: number, h: number) => {
-    // A sensible starting box around the torso area.
-    const cx = w * 0.5;
-    const cy = h * 0.45;
-    const bw = w * 0.42;
-    const bh = h * 0.48;
-
-    return [
-      { x: cx - bw / 2, y: cy - bh / 2 }, // top-left
-      { x: cx + bw / 2, y: cy - bh / 2 }, // top-right
-      { x: cx + bw / 2, y: cy + bh / 2 }, // bottom-right
-      { x: cx - bw / 2, y: cy + bh / 2 }, // bottom-left
-    ] as [Point, Point, Point, Point];
+  const getPresetForBodyType = useCallback((bt: BodyType | null | undefined): QuadPreset => {
+    if (!bt || bt === "custom") return DEFAULT_PRESET;
+    const found = MODEL_PRESETS.find((p) => p.id === bt);
+    return found?.quadPreset ?? DEFAULT_PRESET;
   }, []);
+
+  const defaultQuadForSize = useCallback(
+    (w: number, h: number) => {
+      const preset = getPresetForBodyType(bodyType);
+      return quadFromPreset(preset, w, h);
+    },
+    [bodyType, getPresetForBodyType]
+  );
+
+  const applyAutoFit = useCallback(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    const preset = getPresetForBodyType(bodyType);
+    setQuad(quadFromPreset(preset, rect.width, rect.height));
+  }, [bodyType, getPresetForBodyType]);
 
   const reset = useCallback(() => {
     const el = containerRef.current;
@@ -348,6 +382,10 @@ export function QuickTryOnOverlay({ modelImage, clothImage }: Props) {
           </div>
 
           <div className="md:col-span-2 flex flex-wrap items-center justify-end gap-2">
+            <Button variant="outline" onClick={applyAutoFit} className="gap-1.5">
+              <Wand2 className="h-4 w-4" />
+              Auto-Fit
+            </Button>
             <Button variant="secondary" onClick={() => setShowHandles((s) => !s)}>
               {showHandles ? "Hide handles" : "Show handles"}
             </Button>

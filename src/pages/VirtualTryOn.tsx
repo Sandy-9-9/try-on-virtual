@@ -6,6 +6,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { Progress } from "@/components/ui/progress";
 import { QuickTryOnOverlay } from "@/components/QuickTryOnOverlay";
+import { ModelGallery, type BodyType } from "@/components/ModelGallery";
 
 const loadingMessages = [
   "Analyzing clothing details...",
@@ -19,6 +20,7 @@ const loadingMessages = [
 const VirtualTryOn = () => {
   const [clothImage, setClothImage] = useState<string | null>(null);
   const [modelImage, setModelImage] = useState<string | null>(null);
+  const [selectedBodyType, setSelectedBodyType] = useState<BodyType | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [result, setResult] = useState<string | null>(null);
   const [lastError, setLastError] = useState<string | null>(null);
@@ -28,7 +30,6 @@ const VirtualTryOn = () => {
   const { toast } = useToast();
 
   const clothInputRef = useRef<HTMLInputElement>(null);
-  const modelInputRef = useRef<HTMLInputElement>(null);
 
   const handleImageUpload = (
     e: React.ChangeEvent<HTMLInputElement>,
@@ -218,32 +219,20 @@ const VirtualTryOn = () => {
             />
           </div>
 
-          {/* Model Image Upload */}
+          {/* Model Gallery */}
           <div>
             <h3 className="text-center mb-4 font-medium">Model Image</h3>
-            <div
-              onClick={() => modelInputRef.current?.click()}
-              className="border-2 border-dashed border-[hsl(210_11%_35%)] rounded-lg p-8 min-h-[200px] flex flex-col items-center justify-center cursor-pointer hover:border-primary transition-colors"
-            >
-              {modelImage ? (
-                <img
-                  src={modelImage}
-                  alt="Model"
-                  className="max-h-48 object-contain rounded"
-                />
-              ) : (
-                <>
-                  <Upload className="h-8 w-8 mb-2 text-[hsl(0_0%_50%)]" />
-                  <span className="text-[hsl(0_0%_50%)]">Choose File</span>
-                </>
-              )}
-            </div>
-            <input
-              ref={modelInputRef}
-              type="file"
-              accept="image/*"
-              onChange={(e) => handleImageUpload(e, setModelImage)}
-              className="hidden"
+            <ModelGallery
+              selectedImage={modelImage}
+              selectedBodyType={selectedBodyType}
+              onSelect={(image, bodyType) => {
+                setModelImage(image);
+                setSelectedBodyType(bodyType);
+              }}
+              onCustomUpload={(dataUrl) => {
+                setModelImage(dataUrl);
+                setSelectedBodyType("custom");
+              }}
             />
           </div>
         </div>
@@ -328,7 +317,7 @@ const VirtualTryOn = () => {
 
             {quickMode && clothImage && modelImage ? (
               <div className="mt-6 text-left">
-                <QuickTryOnOverlay modelImage={modelImage} clothImage={clothImage} />
+                <QuickTryOnOverlay modelImage={modelImage} clothImage={clothImage} bodyType={selectedBodyType} />
               </div>
             ) : (
               <p className="mt-4 text-[hsl(0_0%_50%)] text-xs">

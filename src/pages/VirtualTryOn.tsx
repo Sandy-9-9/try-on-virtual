@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from "react";
-import { Upload, Sparkles, Loader2, Check } from "lucide-react";
+import { Upload, Sparkles, Loader2, Check, Eraser } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Link } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
@@ -251,7 +251,7 @@ const VirtualTryOn = () => {
                     className="max-h-48 object-contain rounded"
                   />
                   {/* Background removal status indicator */}
-                  <div className="absolute bottom-2 left-2 right-2">
+                  <div className="absolute bottom-2 left-2 right-2 flex items-center justify-between gap-2">
                     {isRemovingBg ? (
                       <div className="flex items-center gap-2 bg-background/80 backdrop-blur-sm rounded px-2 py-1 text-xs">
                         <Loader2 className="h-3 w-3 animate-spin text-primary" />
@@ -262,6 +262,19 @@ const VirtualTryOn = () => {
                         <Check className="h-3 w-3 text-green-500" />
                         <span className="text-green-500">Background removed</span>
                       </div>
+                    ) : clothImage && !isRemovingBg ? (
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        className="h-7 text-xs gap-1.5"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          removeBackground(clothImage);
+                        }}
+                      >
+                        <Eraser className="h-3 w-3" />
+                        Remove Background
+                      </Button>
                     ) : null}
                   </div>
                 </>

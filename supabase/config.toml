@@ -1,1 +1,7 @@
 project_id = "bcohvbqadcpjphqolxvg"
+
+[functions.virtual-tryon]
+verify_jwt = false
+
+[functions.remove-background]
+verify_jwt = false

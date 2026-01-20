@@ -7,6 +7,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Progress } from "@/components/ui/progress";
 import { QuickTryOnOverlay } from "@/components/QuickTryOnOverlay";
 import { ModelGallery, type BodyType } from "@/components/ModelGallery";
+import { removeBackgroundFloodFill } from "@/lib/remove-bg-client";
 
 const loadingMessages = [
   "Analyzing clothing details...",
@@ -34,37 +35,58 @@ const VirtualTryOn = () => {
 
   const clothInputRef = useRef<HTMLInputElement>(null);
 
-  // Remove background from garment image
+  // Remove background from garment image - tries server first, then client-side fallback
   const removeBackground = useCallback(async (imageData: string) => {
     setIsRemovingBg(true);
     setBgRemoved(false);
     
     try {
+      // Try server-side AI removal first
       const { data, error } = await supabase.functions.invoke("remove-background", {
         body: { image: imageData },
       });
 
-      if (error) {
-        console.error("Background removal error:", error);
-        setProcessedClothImage(imageData);
+      // If server succeeded with actual processing
+      if (!error && data?.image && !data.skipped) {
+        setProcessedClothImage(data.image);
+        setBgRemoved(true);
+        toast({
+          title: "Background Removed",
+          description: "AI removed the garment background for better overlay.",
+        });
         return;
       }
 
-      if (data?.image) {
-        setProcessedClothImage(data.image);
-        if (!data.skipped) {
-          setBgRemoved(true);
-          toast({
-            title: "Background Removed",
-            description: "Garment background has been removed for better overlay.",
-          });
-        }
-      } else {
-        setProcessedClothImage(imageData);
-      }
+      // Server skipped or failed - use client-side fallback
+      console.log("Using client-side background removal...");
+      const clientResult = await removeBackgroundFloodFill(imageData);
+      setProcessedClothImage(clientResult);
+      setBgRemoved(true);
+      toast({
+        title: "Background Removed",
+        description: "Garment background removed locally for better overlay.",
+      });
     } catch (err) {
       console.error("Background removal failed:", err);
-      setProcessedClothImage(imageData);
+      
+      // Last resort: try client-side even if server threw
+      try {
+        const clientResult = await removeBackgroundFloodFill(imageData);
+        setProcessedClothImage(clientResult);
+        setBgRemoved(true);
+        toast({
+          title: "Background Removed",
+          description: "Garment background removed locally.",
+        });
+      } catch (clientErr) {
+        console.error("Client-side removal also failed:", clientErr);
+        setProcessedClothImage(imageData);
+        toast({
+          title: "Notice",
+          description: "Could not remove background. Using original image.",
+          variant: "destructive",
+        });
+      }
     } finally {
       setIsRemovingBg(false);
     }

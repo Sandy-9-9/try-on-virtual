@@ -1,5 +1,5 @@
-import { useState, useRef, useEffect } from "react";
-import { Upload, Sparkles } from "lucide-react";
+import { useState, useRef, useEffect, useCallback } from "react";
+import { Upload, Sparkles, Loader2, Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Link } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
@@ -19,6 +19,9 @@ const loadingMessages = [
 
 const VirtualTryOn = () => {
   const [clothImage, setClothImage] = useState<string | null>(null);
+  const [processedClothImage, setProcessedClothImage] = useState<string | null>(null);
+  const [isRemovingBg, setIsRemovingBg] = useState(false);
+  const [bgRemoved, setBgRemoved] = useState(false);
   const [modelImage, setModelImage] = useState<string | null>(null);
   const [selectedBodyType, setSelectedBodyType] = useState<BodyType | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -31,15 +34,58 @@ const VirtualTryOn = () => {
 
   const clothInputRef = useRef<HTMLInputElement>(null);
 
+  // Remove background from garment image
+  const removeBackground = useCallback(async (imageData: string) => {
+    setIsRemovingBg(true);
+    setBgRemoved(false);
+    
+    try {
+      const { data, error } = await supabase.functions.invoke("remove-background", {
+        body: { image: imageData },
+      });
+
+      if (error) {
+        console.error("Background removal error:", error);
+        setProcessedClothImage(imageData);
+        return;
+      }
+
+      if (data?.image) {
+        setProcessedClothImage(data.image);
+        if (!data.skipped) {
+          setBgRemoved(true);
+          toast({
+            title: "Background Removed",
+            description: "Garment background has been removed for better overlay.",
+          });
+        }
+      } else {
+        setProcessedClothImage(imageData);
+      }
+    } catch (err) {
+      console.error("Background removal failed:", err);
+      setProcessedClothImage(imageData);
+    } finally {
+      setIsRemovingBg(false);
+    }
+  }, [toast]);
+
   const handleImageUpload = (
     e: React.ChangeEvent<HTMLInputElement>,
-    setImage: React.Dispatch<React.SetStateAction<string | null>>
+    setImage: React.Dispatch<React.SetStateAction<string | null>>,
+    isCloth = false
   ) => {
     const file = e.target.files?.[0];
     if (file) {
       const reader = new FileReader();
       reader.onload = () => {
-        setImage(reader.result as string);
+        const dataUrl = reader.result as string;
+        setImage(dataUrl);
+        
+        // Auto-remove background for cloth images
+        if (isCloth) {
+          removeBackground(dataUrl);
+        }
       };
       reader.readAsDataURL(file);
     }
@@ -195,14 +241,30 @@ const VirtualTryOn = () => {
             <h3 className="text-center mb-4 font-medium">Cloth Image</h3>
             <div
               onClick={() => clothInputRef.current?.click()}
-              className="border-2 border-dashed border-[hsl(210_11%_35%)] rounded-lg p-8 min-h-[200px] flex flex-col items-center justify-center cursor-pointer hover:border-primary transition-colors"
+              className="border-2 border-dashed border-[hsl(210_11%_35%)] rounded-lg p-8 min-h-[200px] flex flex-col items-center justify-center cursor-pointer hover:border-primary transition-colors relative"
             >
               {clothImage ? (
-                <img
-                  src={clothImage}
-                  alt="Cloth"
-                  className="max-h-48 object-contain rounded"
-                />
+                <>
+                  <img
+                    src={processedClothImage || clothImage}
+                    alt="Cloth"
+                    className="max-h-48 object-contain rounded"
+                  />
+                  {/* Background removal status indicator */}
+                  <div className="absolute bottom-2 left-2 right-2">
+                    {isRemovingBg ? (
+                      <div className="flex items-center gap-2 bg-background/80 backdrop-blur-sm rounded px-2 py-1 text-xs">
+                        <Loader2 className="h-3 w-3 animate-spin text-primary" />
+                        <span className="text-muted-foreground">Removing background...</span>
+                      </div>
+                    ) : bgRemoved ? (
+                      <div className="flex items-center gap-2 bg-background/80 backdrop-blur-sm rounded px-2 py-1 text-xs">
+                        <Check className="h-3 w-3 text-green-500" />
+                        <span className="text-green-500">Background removed</span>
+                      </div>
+                    ) : null}
+                  </div>
+                </>
               ) : (
                 <>
                   <Upload className="h-8 w-8 mb-2 text-[hsl(0_0%_50%)]" />
@@ -214,7 +276,7 @@ const VirtualTryOn = () => {
               ref={clothInputRef}
               type="file"
               accept="image/*"
-              onChange={(e) => handleImageUpload(e, setClothImage)}
+              onChange={(e) => handleImageUpload(e, setClothImage, true)}
               className="hidden"
             />
           </div>
@@ -317,7 +379,11 @@ const VirtualTryOn = () => {
 
             {quickMode && clothImage && modelImage ? (
               <div className="mt-6 text-left">
-                <QuickTryOnOverlay modelImage={modelImage} clothImage={clothImage} bodyType={selectedBodyType} />
+                <QuickTryOnOverlay 
+                  modelImage={modelImage} 
+                  clothImage={processedClothImage || clothImage} 
+                  bodyType={selectedBodyType} 
+                />
               </div>
             ) : (
               <p className="mt-4 text-[hsl(0_0%_50%)] text-xs">

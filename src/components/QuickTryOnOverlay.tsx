@@ -92,7 +92,13 @@ export function QuickTryOnOverlay({ modelImage, clothImage, bodyType }: Props) {
   );
 
   const applyAutoFit = useCallback(() => {
+    const canvas = canvasRef.current;
     const el = containerRef.current;
+    if (canvas && canvas.width > 0 && canvas.height > 0) {
+      const preset = getPresetForBodyType(bodyType);
+      setQuad(quadFromPreset(preset, canvas.width, canvas.height));
+      return;
+    }
     if (!el) return;
     const rect = el.getBoundingClientRect();
     const preset = getPresetForBodyType(bodyType);
@@ -100,10 +106,14 @@ export function QuickTryOnOverlay({ modelImage, clothImage, bodyType }: Props) {
   }, [bodyType, getPresetForBodyType]);
 
   const reset = useCallback(() => {
+    const canvas = canvasRef.current;
     const el = containerRef.current;
-    if (!el) return;
-    const rect = el.getBoundingClientRect();
-    setQuad(defaultQuadForSize(rect.width, rect.height));
+    if (canvas && canvas.width > 0 && canvas.height > 0) {
+      setQuad(defaultQuadForSize(canvas.width, canvas.height));
+    } else if (el) {
+      const rect = el.getBoundingClientRect();
+      setQuad(defaultQuadForSize(rect.width, rect.height));
+    }
     setOpacity(0.85);
     setCompositeMode("multiply");
     setShowHandles(true);
@@ -118,15 +128,35 @@ export function QuickTryOnOverlay({ modelImage, clothImage, bodyType }: Props) {
     const nextW = Math.max(1, Math.round(rect.width));
     const nextH = Math.max(1, Math.round(rect.height));
 
+    const prevW = canvas.width || nextW;
+    const prevH = canvas.height || nextH;
+
     if (canvas.width !== nextW) canvas.width = nextW;
     if (canvas.height !== nextH) canvas.height = nextH;
 
-    // If quad is uninitialized, seed it.
+    // If quad is uninitialized, seed it. Otherwise scale it so it stays aligned
+    // when the stage size/aspect changes (e.g. when model image loads).
     setQuad((q) => {
       const allZero = q.every((p) => p.x === 0 && p.y === 0);
-      return allZero ? defaultQuadForSize(nextW, nextH) : q;
+      if (allZero) return defaultQuadForSize(nextW, nextH);
+
+      if (prevW !== nextW || prevH !== nextH) {
+        const sx = nextW / prevW;
+        const sy = nextH / prevH;
+        return q.map((p) => ({ x: p.x * sx, y: p.y * sy })) as any;
+      }
+
+      return q;
     });
   }, [defaultQuadForSize]);
+
+  // When the user switches model body presets, re-auto-fit the warp to that preset.
+  useEffect(() => {
+    // Skip on initial mount until canvas is sized.
+    const canvas = canvasRef.current;
+    if (!canvas || canvas.width <= 1 || canvas.height <= 1) return;
+    applyAutoFit();
+  }, [applyAutoFit, bodyType]);
 
   const redraw = useCallback(() => {
     const canvas = canvasRef.current;

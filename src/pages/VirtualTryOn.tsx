@@ -146,6 +146,9 @@ const VirtualTryOn = () => {
   const handleTryOn = async () => {
     if (!clothImage || !modelImage) return;
 
+    // Prefer background-removed garment when available for both AI and Quick Try-On.
+    const clothForTryOn = processedClothImage || clothImage;
+
     setIsProcessing(true);
     setResult(null);
     setLastError(null);
@@ -154,15 +157,15 @@ const VirtualTryOn = () => {
 
     try {
       const { data, error } = await supabase.functions.invoke("virtual-tryon", {
-        body: { clothImage, modelImage },
+        body: { clothImage: clothForTryOn, modelImage },
       });
 
       if (error) throw error;
 
       setProgress(100);
 
-      if (data?.image) {
-        if (data.image === clothImage || data.image === modelImage) {
+        if (data?.image) {
+          if (data.image === clothForTryOn || data.image === modelImage) {
           throw new Error(
             "Try-on failed (the AI returned an input image). Please try a clearer garment photo or a different model photo."
           );
@@ -205,7 +208,7 @@ const VirtualTryOn = () => {
             backendMsg.toLowerCase().includes("quota")));
 
       // If AI is unavailable (credits/quota/rate-limit), switch to Quick Try-On mode (no AI).
-      const shouldQuickMode = (status === 402 || status === 429 || isQuotaOrCredits) && clothImage && modelImage;
+      const shouldQuickMode = (status === 402 || status === 429 || isQuotaOrCredits) && clothForTryOn && modelImage;
       if (shouldQuickMode) setQuickMode(true);
 
       const message =

@@ -59,6 +59,10 @@ export function QuickTryOnOverlay({ modelImage, clothImage, bodyType }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
+  // Keep canvas coordinates aligned with the *rendered* model image.
+  // We do this by locking the stage to the model image's natural aspect ratio.
+  const [stageAspect, setStageAspect] = useState<number>(3 / 4);
+
   const clothImgRef = useRef<HTMLImageElement | null>(null);
   const dragRef = useRef<DragState>({ kind: "none" });
 
@@ -325,12 +329,22 @@ export function QuickTryOnOverlay({ modelImage, clothImage, bodyType }: Props) {
   return (
     <div className="space-y-6">
       <div className="rounded-lg border border-border bg-card p-4">
-        <div ref={containerRef} className="relative overflow-hidden rounded-md">
+        <div
+          ref={containerRef}
+          className="relative mx-auto w-full overflow-hidden rounded-md"
+          style={{ aspectRatio: stageAspect, maxHeight: 520 }}
+        >
           <img
             src={modelImage}
             alt="Model preview"
-            className="block w-full max-h-[520px] object-contain"
+            className="absolute inset-0 h-full w-full object-contain"
             loading="lazy"
+            onLoad={(e) => {
+              const img = e.currentTarget;
+              if (img.naturalWidth > 0 && img.naturalHeight > 0) {
+                setStageAspect(img.naturalWidth / img.naturalHeight);
+              }
+            }}
           />
 
           {/* Canvas overlay (warped garment) */}

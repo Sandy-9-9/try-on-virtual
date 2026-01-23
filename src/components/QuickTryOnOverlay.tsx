@@ -9,23 +9,10 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { drawImageWarpedToQuad, pointInQuad, type Point, type WarpCompositeMode } from "@/lib/image-warp";
-import { MODEL_PRESETS, type BodyType } from "@/components/ModelGallery";
-import { Wand2, Lock, LockOpen } from "lucide-react";
-import { Switch } from "@/components/ui/switch";
-import { Label } from "@/components/ui/label";
-
-export interface QuadPreset {
-  cx: number;
-  cy: number;
-  wRatio: number;
-  hRatio: number;
-}
 
 type Props = {
   modelImage: string;
   clothImage: string;
-  /** Body type preset for auto-fit warp */
-  bodyType?: BodyType | null;
 };
 
 type DragState =
@@ -41,29 +28,9 @@ function copyQuad(q: [Point, Point, Point, Point]): [Point, Point, Point, Point]
   return q.map((p) => ({ x: p.x, y: p.y })) as any;
 }
 
-function quadFromPreset(preset: QuadPreset, w: number, h: number): [Point, Point, Point, Point] {
-  const cx = w * preset.cx;
-  const cy = h * preset.cy;
-  const bw = w * preset.wRatio;
-  const bh = h * preset.hRatio;
-
-  return [
-    { x: cx - bw / 2, y: cy - bh / 2 },
-    { x: cx + bw / 2, y: cy - bh / 2 },
-    { x: cx + bw / 2, y: cy + bh / 2 },
-    { x: cx - bw / 2, y: cy + bh / 2 },
-  ];
-}
-
-const DEFAULT_PRESET: QuadPreset = { cx: 0.5, cy: 0.45, wRatio: 0.42, hRatio: 0.48 };
-
-export function QuickTryOnOverlay({ modelImage, clothImage, bodyType }: Props) {
+export function QuickTryOnOverlay({ modelImage, clothImage }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
-
-  // Keep canvas coordinates aligned with the *rendered* model image.
-  // We do this by locking the stage to the model image's natural aspect ratio.
-  const [stageAspect, setStageAspect] = useState<number>(3 / 4);
 
   const clothImgRef = useRef<HTMLImageElement | null>(null);
   const dragRef = useRef<DragState>({ kind: "none" });
@@ -71,7 +38,6 @@ export function QuickTryOnOverlay({ modelImage, clothImage, bodyType }: Props) {
   const [opacity, setOpacity] = useState(0.85);
   const [compositeMode, setCompositeMode] = useState<WarpCompositeMode>("multiply");
   const [showHandles, setShowHandles] = useState(true);
-  const [lockFit, setLockFit] = useState(false);
 
   const [quad, setQuad] = useState<[Point, Point, Point, Point]>([
     { x: 0, y: 0 },
@@ -80,47 +46,29 @@ export function QuickTryOnOverlay({ modelImage, clothImage, bodyType }: Props) {
     { x: 0, y: 0 },
   ]);
 
-  const getPresetForBodyType = useCallback((bt: BodyType | null | undefined): QuadPreset => {
-    if (!bt || bt === "custom") return DEFAULT_PRESET;
-    const found = MODEL_PRESETS.find((p) => p.id === bt);
-    return found?.quadPreset ?? DEFAULT_PRESET;
+  const defaultQuadForSize = useCallback((w: number, h: number) => {
+    // A sensible starting box around the torso area.
+    const cx = w * 0.5;
+    const cy = h * 0.45;
+    const bw = w * 0.42;
+    const bh = h * 0.48;
+
+    return [
+      { x: cx - bw / 2, y: cy - bh / 2 }, // top-left
+      { x: cx + bw / 2, y: cy - bh / 2 }, // top-right
+      { x: cx + bw / 2, y: cy + bh / 2 }, // bottom-right
+      { x: cx - bw / 2, y: cy + bh / 2 }, // bottom-left
+    ] as [Point, Point, Point, Point];
   }, []);
 
-  const defaultQuadForSize = useCallback(
-    (w: number, h: number) => {
-      const preset = getPresetForBodyType(bodyType);
-      return quadFromPreset(preset, w, h);
-    },
-    [bodyType, getPresetForBodyType]
-  );
-
-  const applyAutoFit = useCallback(() => {
-    const canvas = canvasRef.current;
+  const reset = useCallback(() => {
     const el = containerRef.current;
-    if (canvas && canvas.width > 0 && canvas.height > 0) {
-      const preset = getPresetForBodyType(bodyType);
-      setQuad(quadFromPreset(preset, canvas.width, canvas.height));
-      return;
-    }
     if (!el) return;
     const rect = el.getBoundingClientRect();
-    const preset = getPresetForBodyType(bodyType);
-    setQuad(quadFromPreset(preset, rect.width, rect.height));
-  }, [bodyType, getPresetForBodyType]);
-
-  const reset = useCallback(() => {
-    const canvas = canvasRef.current;
-    const el = containerRef.current;
-    if (canvas && canvas.width > 0 && canvas.height > 0) {
-      setQuad(defaultQuadForSize(canvas.width, canvas.height));
-    } else if (el) {
-      const rect = el.getBoundingClientRect();
-      setQuad(defaultQuadForSize(rect.width, rect.height));
-    }
+    setQuad(defaultQuadForSize(rect.width, rect.height));
     setOpacity(0.85);
     setCompositeMode("multiply");
     setShowHandles(true);
-    setLockFit(false);
   }, [defaultQuadForSize]);
 
   const resizeCanvasToContainer = useCallback(() => {
@@ -132,35 +80,15 @@ export function QuickTryOnOverlay({ modelImage, clothImage, bodyType }: Props) {
     const nextW = Math.max(1, Math.round(rect.width));
     const nextH = Math.max(1, Math.round(rect.height));
 
-    const prevW = canvas.width || nextW;
-    const prevH = canvas.height || nextH;
-
     if (canvas.width !== nextW) canvas.width = nextW;
     if (canvas.height !== nextH) canvas.height = nextH;
 
-    // If quad is uninitialized, seed it. Otherwise scale it so it stays aligned
-    // when the stage size/aspect changes (e.g. when model image loads).
+    // If quad is uninitialized, seed it.
     setQuad((q) => {
       const allZero = q.every((p) => p.x === 0 && p.y === 0);
-      if (allZero) return defaultQuadForSize(nextW, nextH);
-
-      if (prevW !== nextW || prevH !== nextH) {
-        const sx = nextW / prevW;
-        const sy = nextH / prevH;
-        return q.map((p) => ({ x: p.x * sx, y: p.y * sy })) as any;
-      }
-
-      return q;
+      return allZero ? defaultQuadForSize(nextW, nextH) : q;
     });
   }, [defaultQuadForSize]);
-
-  // When the user switches model body presets, re-auto-fit the warp to that preset (unless locked).
-  useEffect(() => {
-    if (lockFit) return; // respect lock
-    const canvas = canvasRef.current;
-    if (!canvas || canvas.width <= 1 || canvas.height <= 1) return;
-    applyAutoFit();
-  }, [applyAutoFit, bodyType, lockFit]);
 
   const redraw = useCallback(() => {
     const canvas = canvasRef.current;
@@ -363,22 +291,12 @@ export function QuickTryOnOverlay({ modelImage, clothImage, bodyType }: Props) {
   return (
     <div className="space-y-6">
       <div className="rounded-lg border border-border bg-card p-4">
-        <div
-          ref={containerRef}
-          className="relative mx-auto w-full overflow-hidden rounded-md"
-          style={{ aspectRatio: stageAspect, maxHeight: 520 }}
-        >
+        <div ref={containerRef} className="relative overflow-hidden rounded-md">
           <img
             src={modelImage}
             alt="Model preview"
-            className="absolute inset-0 h-full w-full object-contain"
+            className="block w-full max-h-[520px] object-contain"
             loading="lazy"
-            onLoad={(e) => {
-              const img = e.currentTarget;
-              if (img.naturalWidth > 0 && img.naturalHeight > 0) {
-                setStageAspect(img.naturalWidth / img.naturalHeight);
-              }
-            }}
           />
 
           {/* Canvas overlay (warped garment) */}
@@ -429,29 +347,11 @@ export function QuickTryOnOverlay({ modelImage, clothImage, bodyType }: Props) {
             </Select>
           </div>
 
-          <div className="md:col-span-2 flex flex-wrap items-center justify-between gap-4">
-            <div className="flex items-center gap-2">
-              <Switch
-                id="lock-fit"
-                checked={lockFit}
-                onCheckedChange={setLockFit}
-              />
-              <Label htmlFor="lock-fit" className="flex items-center gap-1.5 text-sm cursor-pointer select-none">
-                {lockFit ? <Lock className="h-3.5 w-3.5" /> : <LockOpen className="h-3.5 w-3.5" />}
-                Lock fit
-              </Label>
-            </div>
-
-            <div className="flex flex-wrap items-center gap-2">
-              <Button variant="outline" onClick={applyAutoFit} disabled={lockFit} className="gap-1.5">
-                <Wand2 className="h-4 w-4" />
-                Auto-Fit
-              </Button>
-              <Button variant="secondary" onClick={() => setShowHandles((s) => !s)}>
-                {showHandles ? "Hide handles" : "Show handles"}
-              </Button>
-              <Button variant="secondary" onClick={reset}>Reset</Button>
-            </div>
+          <div className="md:col-span-2 flex flex-wrap items-center justify-end gap-2">
+            <Button variant="secondary" onClick={() => setShowHandles((s) => !s)}>
+              {showHandles ? "Hide handles" : "Show handles"}
+            </Button>
+            <Button variant="secondary" onClick={reset}>Reset</Button>
           </div>
         </div>
       </div>

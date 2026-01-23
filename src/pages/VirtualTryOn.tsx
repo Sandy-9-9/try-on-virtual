@@ -1,13 +1,11 @@
-import { useState, useRef, useEffect, useCallback } from "react";
-import { Upload, Sparkles, Loader2, Check, Eraser } from "lucide-react";
+import { useState, useRef, useEffect } from "react";
+import { Upload, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Link } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { Progress } from "@/components/ui/progress";
 import { QuickTryOnOverlay } from "@/components/QuickTryOnOverlay";
-import { ModelGallery, type BodyType } from "@/components/ModelGallery";
-import { removeBackgroundFloodFill } from "@/lib/remove-bg-client";
 
 const loadingMessages = [
   "Analyzing clothing details...",
@@ -20,11 +18,7 @@ const loadingMessages = [
 
 const VirtualTryOn = () => {
   const [clothImage, setClothImage] = useState<string | null>(null);
-  const [processedClothImage, setProcessedClothImage] = useState<string | null>(null);
-  const [isRemovingBg, setIsRemovingBg] = useState(false);
-  const [bgRemoved, setBgRemoved] = useState(false);
   const [modelImage, setModelImage] = useState<string | null>(null);
-  const [selectedBodyType, setSelectedBodyType] = useState<BodyType | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [result, setResult] = useState<string | null>(null);
   const [lastError, setLastError] = useState<string | null>(null);
@@ -34,80 +28,17 @@ const VirtualTryOn = () => {
   const { toast } = useToast();
 
   const clothInputRef = useRef<HTMLInputElement>(null);
-
-  // Remove background from garment image - tries server first, then client-side fallback
-  const removeBackground = useCallback(async (imageData: string) => {
-    setIsRemovingBg(true);
-    setBgRemoved(false);
-    
-    try {
-      // Try server-side AI removal first
-      const { data, error } = await supabase.functions.invoke("remove-background", {
-        body: { image: imageData },
-      });
-
-      // If server succeeded with actual processing
-      if (!error && data?.image && !data.skipped) {
-        setProcessedClothImage(data.image);
-        setBgRemoved(true);
-        toast({
-          title: "Background Removed",
-          description: "AI removed the garment background for better overlay.",
-        });
-        return;
-      }
-
-      // Server skipped or failed - use client-side fallback
-      console.log("Using client-side background removal...");
-      const clientResult = await removeBackgroundFloodFill(imageData);
-      setProcessedClothImage(clientResult);
-      setBgRemoved(true);
-      toast({
-        title: "Background Removed",
-        description: "Garment background removed locally for better overlay.",
-      });
-    } catch (err) {
-      console.error("Background removal failed:", err);
-      
-      // Last resort: try client-side even if server threw
-      try {
-        const clientResult = await removeBackgroundFloodFill(imageData);
-        setProcessedClothImage(clientResult);
-        setBgRemoved(true);
-        toast({
-          title: "Background Removed",
-          description: "Garment background removed locally.",
-        });
-      } catch (clientErr) {
-        console.error("Client-side removal also failed:", clientErr);
-        setProcessedClothImage(imageData);
-        toast({
-          title: "Notice",
-          description: "Could not remove background. Using original image.",
-          variant: "destructive",
-        });
-      }
-    } finally {
-      setIsRemovingBg(false);
-    }
-  }, [toast]);
+  const modelInputRef = useRef<HTMLInputElement>(null);
 
   const handleImageUpload = (
     e: React.ChangeEvent<HTMLInputElement>,
-    setImage: React.Dispatch<React.SetStateAction<string | null>>,
-    isCloth = false
+    setImage: React.Dispatch<React.SetStateAction<string | null>>
   ) => {
     const file = e.target.files?.[0];
     if (file) {
       const reader = new FileReader();
       reader.onload = () => {
-        const dataUrl = reader.result as string;
-        setImage(dataUrl);
-        
-        // Auto-remove background for cloth images
-        if (isCloth) {
-          removeBackground(dataUrl);
-        }
+        setImage(reader.result as string);
       };
       reader.readAsDataURL(file);
     }
@@ -146,9 +77,6 @@ const VirtualTryOn = () => {
   const handleTryOn = async () => {
     if (!clothImage || !modelImage) return;
 
-    // Prefer background-removed garment when available for both AI and Quick Try-On.
-    const clothForTryOn = processedClothImage || clothImage;
-
     setIsProcessing(true);
     setResult(null);
     setLastError(null);
@@ -157,15 +85,15 @@ const VirtualTryOn = () => {
 
     try {
       const { data, error } = await supabase.functions.invoke("virtual-tryon", {
-        body: { clothImage: clothForTryOn, modelImage },
+        body: { clothImage, modelImage },
       });
 
       if (error) throw error;
 
       setProgress(100);
 
-        if (data?.image) {
-          if (data.image === clothForTryOn || data.image === modelImage) {
+      if (data?.image) {
+        if (data.image === clothImage || data.image === modelImage) {
           throw new Error(
             "Try-on failed (the AI returned an input image). Please try a clearer garment photo or a different model photo."
           );
@@ -208,7 +136,7 @@ const VirtualTryOn = () => {
             backendMsg.toLowerCase().includes("quota")));
 
       // If AI is unavailable (credits/quota/rate-limit), switch to Quick Try-On mode (no AI).
-      const shouldQuickMode = (status === 402 || status === 429 || isQuotaOrCredits) && clothForTryOn && modelImage;
+      const shouldQuickMode = (status === 402 || status === 429 || isQuotaOrCredits) && clothImage && modelImage;
       if (shouldQuickMode) setQuickMode(true);
 
       const message =
@@ -266,43 +194,14 @@ const VirtualTryOn = () => {
             <h3 className="text-center mb-4 font-medium">Cloth Image</h3>
             <div
               onClick={() => clothInputRef.current?.click()}
-              className="border-2 border-dashed border-[hsl(210_11%_35%)] rounded-lg p-8 min-h-[200px] flex flex-col items-center justify-center cursor-pointer hover:border-primary transition-colors relative"
+              className="border-2 border-dashed border-[hsl(210_11%_35%)] rounded-lg p-8 min-h-[200px] flex flex-col items-center justify-center cursor-pointer hover:border-primary transition-colors"
             >
               {clothImage ? (
-                <>
-                  <img
-                    src={processedClothImage || clothImage}
-                    alt="Cloth"
-                    className="max-h-48 object-contain rounded"
-                  />
-                  {/* Background removal status indicator */}
-                  <div className="absolute bottom-2 left-2 right-2 flex items-center justify-between gap-2">
-                    {isRemovingBg ? (
-                      <div className="flex items-center gap-2 bg-background/80 backdrop-blur-sm rounded px-2 py-1 text-xs">
-                        <Loader2 className="h-3 w-3 animate-spin text-primary" />
-                        <span className="text-muted-foreground">Removing background...</span>
-                      </div>
-                    ) : bgRemoved ? (
-                      <div className="flex items-center gap-2 bg-background/80 backdrop-blur-sm rounded px-2 py-1 text-xs">
-                        <Check className="h-3 w-3 text-green-500" />
-                        <span className="text-green-500">Background removed</span>
-                      </div>
-                    ) : clothImage && !isRemovingBg ? (
-                      <Button
-                        variant="secondary"
-                        size="sm"
-                        className="h-7 text-xs gap-1.5"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          removeBackground(clothImage);
-                        }}
-                      >
-                        <Eraser className="h-3 w-3" />
-                        Remove Background
-                      </Button>
-                    ) : null}
-                  </div>
-                </>
+                <img
+                  src={clothImage}
+                  alt="Cloth"
+                  className="max-h-48 object-contain rounded"
+                />
               ) : (
                 <>
                   <Upload className="h-8 w-8 mb-2 text-[hsl(0_0%_50%)]" />
@@ -314,25 +213,37 @@ const VirtualTryOn = () => {
               ref={clothInputRef}
               type="file"
               accept="image/*"
-              onChange={(e) => handleImageUpload(e, setClothImage, true)}
+              onChange={(e) => handleImageUpload(e, setClothImage)}
               className="hidden"
             />
           </div>
 
-          {/* Model Gallery */}
+          {/* Model Image Upload */}
           <div>
             <h3 className="text-center mb-4 font-medium">Model Image</h3>
-            <ModelGallery
-              selectedImage={modelImage}
-              selectedBodyType={selectedBodyType}
-              onSelect={(image, bodyType) => {
-                setModelImage(image);
-                setSelectedBodyType(bodyType);
-              }}
-              onCustomUpload={(dataUrl) => {
-                setModelImage(dataUrl);
-                setSelectedBodyType("custom");
-              }}
+            <div
+              onClick={() => modelInputRef.current?.click()}
+              className="border-2 border-dashed border-[hsl(210_11%_35%)] rounded-lg p-8 min-h-[200px] flex flex-col items-center justify-center cursor-pointer hover:border-primary transition-colors"
+            >
+              {modelImage ? (
+                <img
+                  src={modelImage}
+                  alt="Model"
+                  className="max-h-48 object-contain rounded"
+                />
+              ) : (
+                <>
+                  <Upload className="h-8 w-8 mb-2 text-[hsl(0_0%_50%)]" />
+                  <span className="text-[hsl(0_0%_50%)]">Choose File</span>
+                </>
+              )}
+            </div>
+            <input
+              ref={modelInputRef}
+              type="file"
+              accept="image/*"
+              onChange={(e) => handleImageUpload(e, setModelImage)}
+              className="hidden"
             />
           </div>
         </div>
@@ -417,11 +328,7 @@ const VirtualTryOn = () => {
 
             {quickMode && clothImage && modelImage ? (
               <div className="mt-6 text-left">
-                <QuickTryOnOverlay 
-                  modelImage={modelImage} 
-                  clothImage={processedClothImage || clothImage} 
-                  bodyType={selectedBodyType} 
-                />
+                <QuickTryOnOverlay modelImage={modelImage} clothImage={clothImage} />
               </div>
             ) : (
               <p className="mt-4 text-[hsl(0_0%_50%)] text-xs">

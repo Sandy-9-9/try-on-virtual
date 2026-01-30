@@ -1,13 +1,6 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { drawImageWarpedToQuad, pointInQuad, type Point, type WarpCompositeMode } from "@/lib/image-warp";
 
 type Props = {
@@ -104,6 +97,7 @@ export function QuickTryOnOverlay({ modelImage, clothImage }: Props) {
       quad,
       opacity,
       compositeMode,
+      subdivisions: 8, // smoother warp
     });
 
     if (showHandles) {
@@ -334,17 +328,17 @@ export function QuickTryOnOverlay({ modelImage, clothImage }: Props) {
               <span className="text-sm font-medium">Blend</span>
               <span className="text-xs text-muted-foreground">{modeLabel}</span>
             </div>
-            <Select value={compositeMode} onValueChange={(v) => setCompositeMode(v as WarpCompositeMode)}>
-              <SelectTrigger>
-                <SelectValue placeholder="Blend mode" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="multiply">Multiply (best)</SelectItem>
-                <SelectItem value="soft-light">Soft light</SelectItem>
-                <SelectItem value="overlay">Overlay</SelectItem>
-                <SelectItem value="normal">Normal</SelectItem>
-              </SelectContent>
-            </Select>
+            {/* Use native select to avoid forwardRef warning with Radix */}
+            <select
+              value={compositeMode}
+              onChange={(e) => setCompositeMode(e.target.value as WarpCompositeMode)}
+              className="flex h-10 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
+            >
+              <option value="multiply">Multiply (best)</option>
+              <option value="soft-light">Soft light</option>
+              <option value="overlay">Overlay</option>
+              <option value="normal">Normal</option>
+            </select>
           </div>
 
           <div className="md:col-span-2 flex flex-wrap items-center justify-end gap-2">

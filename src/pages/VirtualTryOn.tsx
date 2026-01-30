@@ -248,8 +248,8 @@ const VirtualTryOn = () => {
           </div>
         </div>
 
-        {/* Try It Button */}
-        <div className="mt-8">
+        {/* Try It Buttons */}
+        <div className="mt-8 flex flex-wrap gap-4 justify-center">
           <Button
             onClick={handleTryOn}
             disabled={!clothImage || !modelImage || isProcessing}
@@ -262,9 +262,24 @@ const VirtualTryOn = () => {
               </>
             ) : (
               <>
-                Try It <Sparkles className="ml-2 h-5 w-5" />
+                AI Try-On <Sparkles className="ml-2 h-5 w-5" />
               </>
             )}
+          </Button>
+          
+          <Button
+            onClick={() => {
+              if (clothImage && modelImage) {
+                setQuickMode(true);
+                setResult(null);
+                setLastError(null);
+              }
+            }}
+            disabled={!clothImage || !modelImage || isProcessing}
+            variant="secondary"
+            className="px-8 py-6 rounded-lg font-medium"
+          >
+            Quick Try-On (No AI)
           </Button>
         </div>
       </section>
@@ -321,24 +336,25 @@ const VirtualTryOn = () => {
               Virtual try-on preview
             </p>
           </div>
+        ) : quickMode && clothImage && modelImage ? (
+          <div className="bg-[hsl(210_11%_20%)] rounded-lg p-8 animate-fade-in">
+            <p className="text-[hsl(0_0%_80%)] font-medium mb-4">Quick Try-On Mode</p>
+            <p className="text-[hsl(0_0%_60%)] text-sm mb-6">
+              Drag the 4 corner dots to warp the garment onto the model. Adjust opacity and blend mode for best results.
+            </p>
+            <QuickTryOnOverlay modelImage={modelImage} clothImage={clothImage} />
+          </div>
         ) : lastError ? (
           <div className="bg-[hsl(210_11%_20%)] rounded-lg p-8 animate-fade-in">
             <p className="text-[hsl(0_0%_80%)] font-medium">Could not generate a result</p>
             <p className="mt-2 text-[hsl(0_0%_60%)] text-sm">{lastError}</p>
-
-            {quickMode && clothImage && modelImage ? (
-              <div className="mt-6 text-left">
-                <QuickTryOnOverlay modelImage={modelImage} clothImage={clothImage} />
-              </div>
-            ) : (
-              <p className="mt-4 text-[hsl(0_0%_50%)] text-xs">
-                Tip: If you just added credits, refresh the page and try again.
-              </p>
-            )}
+            <p className="mt-4 text-[hsl(0_0%_50%)] text-xs">
+              Tip: Use the "Quick Try-On (No AI)" button above for manual garment placement.
+            </p>
           </div>
         ) : (
           <div className="bg-[hsl(210_11%_20%)] rounded-lg p-12 text-[hsl(0_0%_50%)]">
-            <p>Upload both images and click "Try It" to see the result</p>
+            <p>Upload both images and click a button above to see the result</p>
           </div>
         )}
       </section>

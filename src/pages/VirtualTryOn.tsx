@@ -5,7 +5,6 @@ import { Link } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { Progress } from "@/components/ui/progress";
-import { QuickTryOnOverlay } from "@/components/QuickTryOnOverlay";
 
 const loadingMessages = [
   "Analyzing clothing details...",
@@ -22,7 +21,6 @@ const VirtualTryOn = () => {
   const [isProcessing, setIsProcessing] = useState(false);
   const [result, setResult] = useState<string | null>(null);
   const [lastError, setLastError] = useState<string | null>(null);
-  const [quickMode, setQuickMode] = useState(false);
   const [progress, setProgress] = useState(0);
   const [loadingMessage, setLoadingMessage] = useState(loadingMessages[0]);
   const { toast } = useToast();
@@ -80,7 +78,6 @@ const VirtualTryOn = () => {
     setIsProcessing(true);
     setResult(null);
     setLastError(null);
-    setQuickMode(false);
     setProgress(0);
 
     try {
@@ -127,33 +124,19 @@ const VirtualTryOn = () => {
 
       const retryHint = retryAfterSeconds ? ` Try again in ~${retryAfterSeconds}s.` : "";
 
-      const isQuotaOrCredits =
-        status === 402 ||
-        (typeof backendMsg === "string" &&
-          (backendMsg.includes("payment_required") ||
-            backendMsg.toLowerCase().includes("not enough credits") ||
-            backendMsg.includes("limit is 0") ||
-            backendMsg.toLowerCase().includes("quota")));
-
-      // If AI is unavailable (credits/quota/rate-limit), switch to Quick Try-On mode (no AI).
-      const shouldQuickMode = (status === 402 || status === 429 || isQuotaOrCredits) && clothImage && modelImage;
-      if (shouldQuickMode) setQuickMode(true);
-
       const message =
         status === 429
-          ? (backendMsg ? `${backendMsg}${retryHint}` : `Too many requests right now. Switching to Quick Try-On mode.${retryHint}`)
+          ? (backendMsg ? `${backendMsg}${retryHint}` : `Too many requests right now. Please try again later.${retryHint}`)
+          : status === 401
+          ? "Please log in to use the virtual try-on feature."
           : backendMsg || error?.message || "Failed to process virtual try-on. Please try again.";
 
-      console.error("Try-on error:", { status, message });
-      setLastError(
-        shouldQuickMode
-          ? "AI is unavailable right now. Quick Try-On mode is enabled below — warp the garment with the 4 dots for a better fit."
-          : message
-      );
+      console.error("Try-on error:", { status });
+      setLastError(message);
 
       toast({
         title: "Error",
-        description: shouldQuickMode ? "AI unavailable — opened Quick Try-On mode." : message,
+        description: message,
         variant: "destructive",
       });
     } finally {
@@ -266,21 +249,6 @@ const VirtualTryOn = () => {
               </>
             )}
           </Button>
-          
-          <Button
-            onClick={() => {
-              if (clothImage && modelImage) {
-                setQuickMode(true);
-                setResult(null);
-                setLastError(null);
-              }
-            }}
-            disabled={!clothImage || !modelImage || isProcessing}
-            variant="secondary"
-            className="px-8 py-6 rounded-lg font-medium"
-          >
-            Quick Try-On (No AI)
-          </Button>
         </div>
       </section>
 
@@ -336,21 +304,10 @@ const VirtualTryOn = () => {
               Virtual try-on preview
             </p>
           </div>
-        ) : quickMode && clothImage && modelImage ? (
-          <div className="bg-[hsl(210_11%_20%)] rounded-lg p-8 animate-fade-in">
-            <p className="text-[hsl(0_0%_80%)] font-medium mb-4">Quick Try-On Mode</p>
-            <p className="text-[hsl(0_0%_60%)] text-sm mb-6">
-              Drag the 4 corner dots to warp the garment onto the model. Adjust opacity and blend mode for best results.
-            </p>
-            <QuickTryOnOverlay modelImage={modelImage} clothImage={clothImage} />
-          </div>
         ) : lastError ? (
           <div className="bg-[hsl(210_11%_20%)] rounded-lg p-8 animate-fade-in">
             <p className="text-[hsl(0_0%_80%)] font-medium">Could not generate a result</p>
             <p className="mt-2 text-[hsl(0_0%_60%)] text-sm">{lastError}</p>
-            <p className="mt-4 text-[hsl(0_0%_50%)] text-xs">
-              Tip: Use the "Quick Try-On (No AI)" button above for manual garment placement.
-            </p>
           </div>
         ) : (
           <div className="bg-[hsl(210_11%_20%)] rounded-lg p-12 text-[hsl(0_0%_50%)]">

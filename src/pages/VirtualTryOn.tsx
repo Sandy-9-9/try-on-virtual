@@ -1,11 +1,10 @@
 import { useState, useRef, useEffect } from "react";
-import { Upload, Sparkles, LogIn } from "lucide-react";
+import { Upload, Sparkles, Download } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Link } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { Progress } from "@/components/ui/progress";
-import { useAuth } from "@/context/AuthContext";
 
 const loadingMessages = [
   "Analyzing clothing details...",
@@ -17,7 +16,6 @@ const loadingMessages = [
 ];
 
 const VirtualTryOn = () => {
-  const { user, loading: authLoading } = useAuth();
   const [clothImage, setClothImage] = useState<string | null>(null);
   const [modelImage, setModelImage] = useState<string | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -233,37 +231,24 @@ const VirtualTryOn = () => {
           </div>
         </div>
 
-        {/* Try It Buttons */}
+        {/* Try It Button */}
         <div className="mt-8 flex flex-wrap gap-4 justify-center">
-          {authLoading ? (
-            <Button disabled className="px-8 py-6 rounded-lg font-medium">
-              Loading...
-            </Button>
-          ) : !user ? (
-            <Link to="/login">
-              <Button className="bg-primary hover:bg-primary/90 text-primary-foreground px-8 py-6 rounded-lg font-medium">
-                <LogIn className="mr-2 h-5 w-5" />
-                Log in to Try On
-              </Button>
-            </Link>
-          ) : (
-            <Button
-              onClick={handleTryOn}
-              disabled={!clothImage || !modelImage || isProcessing}
-              className="bg-primary hover:bg-primary/90 text-primary-foreground px-8 py-6 rounded-lg font-medium"
-            >
-              {isProcessing ? (
-                <>
-                  <Sparkles className="mr-2 h-5 w-5 animate-spin" />
-                  Processing...
-                </>
-              ) : (
-                <>
-                  AI Try-On <Sparkles className="ml-2 h-5 w-5" />
-                </>
-              )}
-            </Button>
-          )}
+          <Button
+            onClick={handleTryOn}
+            disabled={!clothImage || !modelImage || isProcessing}
+            className="bg-primary hover:bg-primary/90 text-primary-foreground px-8 py-6 rounded-lg font-medium"
+          >
+            {isProcessing ? (
+              <>
+                <Sparkles className="mr-2 h-5 w-5 animate-spin" />
+                Processing...
+              </>
+            ) : (
+              <>
+                AI Try-On <Sparkles className="ml-2 h-5 w-5" />
+              </>
+            )}
+          </Button>
         </div>
       </section>
 
@@ -318,6 +303,14 @@ const VirtualTryOn = () => {
             <p className="mt-4 text-[hsl(0_0%_60%)] text-sm">
               Virtual try-on preview
             </p>
+            <a
+              href={result}
+              download="virtual-tryon-result.png"
+              className="inline-flex items-center gap-2 mt-4 px-4 py-2 bg-primary hover:bg-primary/90 text-primary-foreground rounded-lg font-medium transition-colors"
+            >
+              <Download className="h-4 w-4" />
+              Download Result
+            </a>
           </div>
         ) : lastError ? (
           <div className="bg-[hsl(210_11%_20%)] rounded-lg p-8 animate-fade-in">

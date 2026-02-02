@@ -6,7 +6,7 @@ const corsHeaders = {
 };
 
 const PROMPT =
-  "Create a NEW photorealistic fashion photo of the person in the FIRST image wearing the clothing item from the SECOND image. IMPORTANT: Do NOT overlay, paste, or copy pixels from either input image. The output MUST be a newly generated image (not the original person photo and not the original clothing photo). Preserve the person's identity (face, hair, skin tone) and keep the background/lighting consistent with the FIRST image. Replace the person's current outfit entirely. The garment must fit naturally to the body with realistic fabric drape, folds, shadows, and correct perspective.";
+  "Generate a single photorealistic image of the person from Image 1 wearing the garment from Image 2. Critical requirements: 1) Preserve the person's exact face, body shape, pose, and background from Image 1. 2) Fit the garment precisely to the body contours - match shoulder width, chest, waist, and arm positions exactly. 3) Apply realistic fabric physics - natural draping, wrinkles at joints, proper shadows under arms and collar. 4) Blend garment edges seamlessly with skin and background. 5) Match lighting direction and color temperature from the original photo. Output one clean result image only.";
 
 // Allowed MIME types for images
 const ALLOWED_MIME_TYPES = ["image/png", "image/jpeg", "image/jpg", "image/webp"];

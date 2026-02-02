@@ -1,5 +1,4 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -271,33 +270,7 @@ serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
   try {
-    // === Authentication Check ===
-    const authHeader = req.headers.get("authorization");
-    if (!authHeader?.startsWith("Bearer ")) {
-      return new Response(
-        JSON.stringify({ error: "Authentication required" }),
-        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-
-    const supabaseClient = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_ANON_KEY")!,
-      { global: { headers: { Authorization: authHeader } } }
-    );
-
-    const { data: { user }, error: authError } = await supabaseClient.auth.getUser();
-    
-    if (authError || !user) {
-      console.error("Auth verification failed:", authError?.message || "No user");
-      return new Response(
-        JSON.stringify({ error: "Invalid authentication token" }),
-        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-
-    const userId = user.id;
-    console.log("Authenticated user:", userId);
+    console.log("Processing virtual try-on request...");
 
     // === Parse and validate request body ===
     let body: { clothImage?: unknown; modelImage?: unknown };
@@ -383,7 +356,7 @@ serve(async (req) => {
       );
     }
 
-    console.log("Virtual try-on successful for user:", userId);
+    console.log("Virtual try-on successful");
 
     return new Response(JSON.stringify({ image: generatedImage }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },

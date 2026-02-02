@@ -1,10 +1,11 @@
 import { useState, useRef, useEffect } from "react";
-import { Upload, Sparkles } from "lucide-react";
+import { Upload, Sparkles, LogIn } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Link } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { Progress } from "@/components/ui/progress";
+import { useAuth } from "@/context/AuthContext";
 
 const loadingMessages = [
   "Analyzing clothing details...",
@@ -16,6 +17,7 @@ const loadingMessages = [
 ];
 
 const VirtualTryOn = () => {
+  const { user, loading: authLoading } = useAuth();
   const [clothImage, setClothImage] = useState<string | null>(null);
   const [modelImage, setModelImage] = useState<string | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -233,22 +235,35 @@ const VirtualTryOn = () => {
 
         {/* Try It Buttons */}
         <div className="mt-8 flex flex-wrap gap-4 justify-center">
-          <Button
-            onClick={handleTryOn}
-            disabled={!clothImage || !modelImage || isProcessing}
-            className="bg-primary hover:bg-primary/90 text-primary-foreground px-8 py-6 rounded-lg font-medium"
-          >
-            {isProcessing ? (
-              <>
-                <Sparkles className="mr-2 h-5 w-5 animate-spin" />
-                Processing...
-              </>
-            ) : (
-              <>
-                AI Try-On <Sparkles className="ml-2 h-5 w-5" />
-              </>
-            )}
-          </Button>
+          {authLoading ? (
+            <Button disabled className="px-8 py-6 rounded-lg font-medium">
+              Loading...
+            </Button>
+          ) : !user ? (
+            <Link to="/login">
+              <Button className="bg-primary hover:bg-primary/90 text-primary-foreground px-8 py-6 rounded-lg font-medium">
+                <LogIn className="mr-2 h-5 w-5" />
+                Log in to Try On
+              </Button>
+            </Link>
+          ) : (
+            <Button
+              onClick={handleTryOn}
+              disabled={!clothImage || !modelImage || isProcessing}
+              className="bg-primary hover:bg-primary/90 text-primary-foreground px-8 py-6 rounded-lg font-medium"
+            >
+              {isProcessing ? (
+                <>
+                  <Sparkles className="mr-2 h-5 w-5 animate-spin" />
+                  Processing...
+                </>
+              ) : (
+                <>
+                  AI Try-On <Sparkles className="ml-2 h-5 w-5" />
+                </>
+              )}
+            </Button>
+          )}
         </div>
       </section>
 

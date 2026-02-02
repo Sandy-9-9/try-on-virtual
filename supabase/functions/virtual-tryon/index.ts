@@ -1,4 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -8,6 +9,10 @@ const corsHeaders = {
 const PROMPT =
   "Create a NEW photorealistic fashion photo of the person in the FIRST image wearing the clothing item from the SECOND image. IMPORTANT: Do NOT overlay, paste, or copy pixels from either input image. The output MUST be a newly generated image (not the original person photo and not the original clothing photo). Preserve the person's identity (face, hair, skin tone) and keep the background/lighting consistent with the FIRST image. Replace the person's current outfit entirely. The garment must fit naturally to the body with realistic fabric drape, folds, shadows, and correct perspective.";
 
+// Allowed MIME types for images
+const ALLOWED_MIME_TYPES = ["image/png", "image/jpeg", "image/jpg", "image/webp"];
+const MAX_IMAGE_SIZE = 10 * 1024 * 1024; // 10MB
+
 type TryOnResult = {
   image?: string;
   status?: number;
@@ -16,17 +21,17 @@ type TryOnResult = {
   kind?: "rate_limit" | "quota" | "bad_request" | "unknown";
 };
 
-function isDataUrl(s: string) {
+function isDataUrl(s: string): boolean {
   return /^data:[^;]+;base64,/.test(s);
 }
 
-function extractBase64(dataUrl: string) {
+function extractBase64(dataUrl: string): { mime_type: string; data: string } {
   const match = dataUrl.match(/^data:([^;]+);base64,(.+)$/);
   if (!match) throw new Error("Invalid data URL format");
   return { mime_type: match[1], data: match[2] };
 }
 
-function arrayBufferToBase64(buf: ArrayBuffer) {
+function arrayBufferToBase64(buf: ArrayBuffer): string {
   const bytes = new Uint8Array(buf);
   const chunkSize = 0x8000;
   let binary = "";
@@ -34,6 +39,61 @@ function arrayBufferToBase64(buf: ArrayBuffer) {
     binary += String.fromCharCode(...bytes.subarray(i, i + chunkSize));
   }
   return btoa(binary);
+}
+
+/**
+ * Validates a data URL or https URL for image inputs
+ * Returns an error message if invalid, null if valid
+ */
+function validateImageInput(input: string, fieldName: string): string | null {
+  if (!input || typeof input !== "string") {
+    return `${fieldName} is required and must be a string`;
+  }
+
+  // Check if it's a data URL
+  if (isDataUrl(input)) {
+    // Validate data URL format
+    const dataUrlMatch = input.match(/^data:([^;]+);base64,([A-Za-z0-9+/]+=*)$/);
+    if (!dataUrlMatch) {
+      return `${fieldName} has invalid data URL format`;
+    }
+
+    const mimeType = dataUrlMatch[1];
+    const base64Data = dataUrlMatch[2];
+
+    // Validate MIME type
+    if (!ALLOWED_MIME_TYPES.includes(mimeType)) {
+      return `${fieldName} must be PNG, JPEG, or WebP. Got: ${mimeType}`;
+    }
+
+    // Validate base64 encoding
+    try {
+      atob(base64Data);
+    } catch {
+      return `${fieldName} has invalid base64 encoding`;
+    }
+
+    // Check approximate size (base64 is ~33% larger than binary)
+    const approximateSize = Math.ceil(base64Data.length * 0.75);
+    if (approximateSize > MAX_IMAGE_SIZE) {
+      return `${fieldName} exceeds 10MB size limit`;
+    }
+
+    return null;
+  }
+
+  // Check if it's an https URL
+  if (/^https?:\/\//.test(input)) {
+    // Basic URL validation - actual content validation happens during fetch
+    try {
+      new URL(input);
+      return null;
+    } catch {
+      return `${fieldName} has invalid URL format`;
+    }
+  }
+
+  return `${fieldName} must be a data URL (data:image/...) or an HTTPS URL`;
 }
 
 async function toInlineData(input: string): Promise<{ mime_type: string; data: string }> {
@@ -45,8 +105,21 @@ async function toInlineData(input: string): Promise<{ mime_type: string; data: s
       throw new Error(`Failed to fetch image URL (${res.status}).`);
     }
 
-    const mime_type = (res.headers.get("content-type") || "image/jpeg").split(";")[0];
+    const contentType = res.headers.get("content-type") || "image/jpeg";
+    const mime_type = contentType.split(";")[0];
+    
+    // Validate MIME type from remote URL
+    if (!ALLOWED_MIME_TYPES.includes(mime_type)) {
+      throw new Error(`Remote image has unsupported type: ${mime_type}`);
+    }
+
     const buf = await res.arrayBuffer();
+    
+    // Check size of fetched image
+    if (buf.byteLength > MAX_IMAGE_SIZE) {
+      throw new Error(`Remote image exceeds 10MB size limit`);
+    }
+
     const data = arrayBufferToBase64(buf);
 
     return { mime_type, data };
@@ -63,7 +136,6 @@ async function callLovableGateway(apiKey: string, modelImage: string, clothImage
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      // Keep the stronger image model here; if workspace credits are exhausted, we will fall back.
       model: "google/gemini-3-pro-image-preview",
       messages: [
         {
@@ -81,7 +153,7 @@ async function callLovableGateway(apiKey: string, modelImage: string, clothImage
 
   if (!response.ok) {
     const errorText = await response.text();
-    console.error("Lovable AI Gateway error:", response.status, errorText);
+    console.error("Lovable AI Gateway error:", response.status);
     return {
       status: response.status,
       error: errorText,
@@ -96,9 +168,6 @@ async function callLovableGateway(apiKey: string, modelImage: string, clothImage
 }
 
 async function callGeminiDirect(apiKey: string, modelImage: string, clothImage: string): Promise<TryOnResult> {
-  // This path does NOT depend on workspace credits. It uses the user's key.
-  // Supports BOTH base64 data URLs and https URLs.
-
   console.log("Trying direct AI fallback using user key...");
 
   let modelImageData;
@@ -143,7 +212,7 @@ async function callGeminiDirect(apiKey: string, modelImage: string, clothImage: 
 
   if (!response.ok) {
     const errorText = await response.text();
-    console.error("Gemini direct API error:", response.status, errorText);
+    console.error("Gemini direct API error:", response.status);
 
     let msg = `AI provider error: ${response.status}`;
     let retryAfterSeconds: number | undefined;
@@ -156,9 +225,9 @@ async function callGeminiDirect(apiKey: string, modelImage: string, clothImage: 
 
       if (Array.isArray(details)) {
         const retryInfo = details.find(
-          (d: any) => d?.["@type"] === "type.googleapis.com/google.rpc.RetryInfo"
+          (d: unknown) => (d as Record<string, unknown>)?.["@type"] === "type.googleapis.com/google.rpc.RetryInfo"
         );
-        const retryDelay = retryInfo?.retryDelay;
+        const retryDelay = (retryInfo as Record<string, unknown>)?.retryDelay;
         if (typeof retryDelay === "string") {
           const m = retryDelay.match(/(\d+)s/);
           if (m) retryAfterSeconds = Number(m[1]);
@@ -202,13 +271,62 @@ serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
   try {
-    const { clothImage, modelImage } = await req.json();
+    // === Authentication Check ===
+    const authHeader = req.headers.get("authorization");
+    if (!authHeader?.startsWith("Bearer ")) {
+      return new Response(
+        JSON.stringify({ error: "Authentication required" }),
+        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
 
-    if (!clothImage || !modelImage) {
-      return new Response(JSON.stringify({ error: "Both cloth and model images are required" }), {
-        status: 400,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+    const supabaseClient = createClient(
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_ANON_KEY")!,
+      { global: { headers: { Authorization: authHeader } } }
+    );
+
+    const { data: { user }, error: authError } = await supabaseClient.auth.getUser();
+    
+    if (authError || !user) {
+      console.error("Auth verification failed:", authError?.message || "No user");
+      return new Response(
+        JSON.stringify({ error: "Invalid authentication token" }),
+        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    const userId = user.id;
+    console.log("Authenticated user:", userId);
+
+    // === Parse and validate request body ===
+    let body: { clothImage?: unknown; modelImage?: unknown };
+    try {
+      body = await req.json();
+    } catch {
+      return new Response(
+        JSON.stringify({ error: "Invalid JSON body" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    const { clothImage, modelImage } = body;
+
+    // === Input Validation ===
+    const clothError = validateImageInput(clothImage as string, "clothImage");
+    if (clothError) {
+      return new Response(
+        JSON.stringify({ error: clothError }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    const modelError = validateImageInput(modelImage as string, "modelImage");
+    if (modelError) {
+      return new Response(
+        JSON.stringify({ error: modelError }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
     }
 
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
@@ -223,17 +341,14 @@ serve(async (req) => {
 
     // Prefer the user's key (works even when workspace credits are exhausted)
     const attempts: Array<() => Promise<TryOnResult>> = [];
-    if (GEMINI_API_KEY) attempts.push(() => callGeminiDirect(GEMINI_API_KEY, modelImage, clothImage));
-    if (LOVABLE_API_KEY) attempts.push(() => callLovableGateway(LOVABLE_API_KEY, modelImage, clothImage));
+    if (GEMINI_API_KEY) attempts.push(() => callGeminiDirect(GEMINI_API_KEY, modelImage as string, clothImage as string));
+    if (LOVABLE_API_KEY) attempts.push(() => callLovableGateway(LOVABLE_API_KEY, modelImage as string, clothImage as string));
 
     let last: TryOnResult | undefined;
 
     for (const attempt of attempts) {
       last = await attempt();
       if (last.image) break;
-
-      // If it's a hard quota problem for that provider, try the next one.
-      // Otherwise also try next provider to maximize chance of success.
     }
 
     const generatedImage = last?.image;
@@ -268,12 +383,14 @@ serve(async (req) => {
       );
     }
 
+    console.log("Virtual try-on successful for user:", userId);
+
     return new Response(JSON.stringify({ image: generatedImage }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (error) {
-    console.error("Virtual try-on error:", error);
-    return new Response(JSON.stringify({ error: error instanceof Error ? error.message : "Unknown error" }), {
+    console.error("Virtual try-on error");
+    return new Response(JSON.stringify({ error: "An error occurred processing your request" }), {
       status: 500,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });

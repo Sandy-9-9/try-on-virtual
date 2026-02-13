@@ -39,7 +39,7 @@ const Navbar = () => {
           {/* Logo */}
           <Link to="/" className="flex items-center gap-2">
             <ShoppingCart className="h-6 w-6 text-foreground" />
-            <span className="text-xl font-bold tracking-wider text-foreground">ATTIRE</span>
+            <span className="text-xl font-bold tracking-wider text-foreground">FitFusion</span>
           </Link>
 
           {/* Navigation Links */}

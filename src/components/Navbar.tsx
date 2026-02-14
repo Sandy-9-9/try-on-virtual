@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { ShoppingCart, Heart, Search, User, X } from "lucide-react";
+import { ShoppingCart, Heart, Search, User, X, Sparkles } from "lucide-react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useCart } from "@/context/CartContext";
 import { useWishlist } from "@/context/WishlistContext";
@@ -84,6 +84,9 @@ const Navbar = () => {
               </form>
             ) : (
               <>
+                <Link to="/try-on" className="p-2 hover:bg-muted rounded-full transition-colors" title="Virtual Try-On">
+                  <Sparkles className="h-5 w-5 text-foreground" />
+                </Link>
                 <Link to="/cart" className="relative p-2 hover:bg-muted rounded-full transition-colors">
                   <ShoppingCart className="h-5 w-5 text-foreground" />
                   {getCartCount() > 0 && (

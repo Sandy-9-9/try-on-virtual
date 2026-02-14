@@ -96,6 +96,7 @@ const ProductCard = ({ id, image, name, price, rating = 5, hasSale = true }: Pro
           {/* Try-On */}
           <Link
             to="/try-on"
+            state={{ clothImage: image, clothName: name }}
             onClick={(e) => e.stopPropagation()}
             className="p-3 bg-background rounded-full shadow-lg hover:bg-purple hover:text-primary-foreground transition-colors"
             title="Virtual Try-On"
@@ -130,6 +131,7 @@ const ProductCard = ({ id, image, name, price, rating = 5, hasSale = true }: Pro
           </button>
           <Link
             to="/try-on"
+            state={{ clothImage: image, clothName: name }}
             className="py-2 px-3 border border-primary text-primary text-sm font-medium rounded-md hover:bg-primary hover:text-primary-foreground transition-colors"
           >
             Try-On

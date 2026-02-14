@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from "react";
 import { Upload, Sparkles, Download } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Link } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { Progress } from "@/components/ui/progress";
@@ -16,7 +16,10 @@ const loadingMessages = [
 ];
 
 const VirtualTryOn = () => {
-  const [clothImage, setClothImage] = useState<string | null>(null);
+  const location = useLocation();
+  const navState = location.state as { clothImage?: string; clothName?: string } | null;
+  
+  const [clothImage, setClothImage] = useState<string | null>(navState?.clothImage || null);
   const [modelImage, setModelImage] = useState<string | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [result, setResult] = useState<string | null>(null);

@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { ShoppingCart, Heart, Search, User, X, Sparkles } from "lucide-react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useCart } from "@/context/CartContext";
@@ -84,9 +85,16 @@ const Navbar = () => {
               </form>
             ) : (
               <>
-                <Link to="/try-on" className="p-2 hover:bg-muted rounded-full transition-colors" title="Virtual Try-On">
-                  <Sparkles className="h-5 w-5 text-foreground" />
-                </Link>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Link to="/try-on" className="p-2 hover:bg-muted rounded-full transition-colors">
+                      <Sparkles className="h-5 w-5 text-foreground" />
+                    </Link>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p>Virtual Try-On</p>
+                  </TooltipContent>
+                </Tooltip>
                 <Link to="/cart" className="relative p-2 hover:bg-muted rounded-full transition-colors">
                   <ShoppingCart className="h-5 w-5 text-foreground" />
                   {getCartCount() > 0 && (

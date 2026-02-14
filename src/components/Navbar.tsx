@@ -87,8 +87,9 @@ const Navbar = () => {
               <>
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <Link to="/try-on" className="p-2 hover:bg-muted rounded-full transition-colors">
-                      <Sparkles className="h-5 w-5 text-foreground" />
+                    <Link to="/try-on" className="flex items-center gap-1.5 px-3 py-1.5 hover:bg-muted rounded-full transition-colors">
+                      <Sparkles className="h-4 w-4 text-foreground" />
+                      <span className="text-sm font-medium text-foreground hidden sm:inline">Try-On</span>
                     </Link>
                   </TooltipTrigger>
                   <TooltipContent>

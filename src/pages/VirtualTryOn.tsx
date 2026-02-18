@@ -126,8 +126,31 @@ const VirtualTryOn = () => {
   const location = useLocation();
   const navState = location.state as { clothImage?: string; clothName?: string } | null;
 
-  const [clothImage, setClothImage] = useState<string | null>(navState?.clothImage || null);
+  const [clothImage, setClothImage] = useState<string | null>(null);
   const [modelImage, setModelImage] = useState<string | null>(null);
+
+  // Convert nav-state image (local path or any URL) to a data URL on mount
+  useEffect(() => {
+    const raw = navState?.clothImage;
+    if (!raw) return;
+    if (raw.startsWith("data:")) { setClothImage(raw); return; }
+    // Fetch the image and convert to data URL
+    fetch(raw)
+      .then((r) => r.blob())
+      .then((blob) => {
+        const reader = new FileReader();
+        reader.onload = async () => {
+          try {
+            const compressed = await compressImage(reader.result as string);
+            setClothImage(compressed);
+          } catch {
+            setClothImage(reader.result as string);
+          }
+        };
+        reader.readAsDataURL(blob);
+      })
+      .catch(() => setClothImage(raw)); // fallback: keep as-is
+  }, []);
   const [isProcessing, setIsProcessing] = useState(false);
   const [result, setResult] = useState<string | null>(null);
   const [lastError, setLastError] = useState<string | null>(null);

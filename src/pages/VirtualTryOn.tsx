@@ -1,5 +1,5 @@
-import { useState, useRef, useEffect } from "react";
-import { Upload, Sparkles, Download } from "lucide-react";
+import { useState, useRef, useEffect, useCallback } from "react";
+import { Upload, Sparkles, Download, Camera, RefreshCw, ImagePlus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Link, useLocation } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
@@ -15,10 +15,117 @@ const loadingMessages = [
   "Generating final result...",
 ];
 
+/** Compress a data-URL to JPEG at target quality/size for faster uploads */
+async function compressImage(dataUrl: string, maxDim = 768, quality = 0.82): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => {
+      let { width, height } = img;
+      const scale = Math.min(1, maxDim / Math.max(width, height));
+      width = Math.round(width * scale);
+      height = Math.round(height * scale);
+      const canvas = document.createElement("canvas");
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) return reject(new Error("Canvas not available"));
+      ctx.drawImage(img, 0, 0, width, height);
+      resolve(canvas.toDataURL("image/jpeg", quality));
+    };
+    img.onerror = () => reject(new Error("Image load failed"));
+    img.src = dataUrl;
+  });
+}
+
+interface UploadZoneProps {
+  label: string;
+  image: string | null;
+  onFile: (dataUrl: string) => void;
+  onClear: () => void;
+  allowCamera?: boolean;
+}
+
+const UploadZone = ({ label, image, onFile, onClear, allowCamera = true }: UploadZoneProps) => {
+  const fileRef = useRef<HTMLInputElement>(null);
+  const cameraRef = useRef<HTMLInputElement>(null);
+
+  const handleChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = async () => {
+      try {
+        const compressed = await compressImage(reader.result as string);
+        onFile(compressed);
+      } catch {
+        onFile(reader.result as string);
+      }
+    };
+    reader.readAsDataURL(file);
+    // reset so same file can be reselected
+    e.target.value = "";
+  };
+
+  return (
+    <div className="flex flex-col gap-2">
+      <h3 className="text-center text-sm font-semibold uppercase tracking-widest text-muted-foreground">{label}</h3>
+
+      {image ? (
+        <div className="relative rounded-xl overflow-hidden border border-border bg-muted aspect-[3/4]">
+          <img src={image} alt={label} className="w-full h-full object-cover" />
+          <button
+            onClick={onClear}
+            className="absolute top-2 right-2 bg-background/80 backdrop-blur-sm p-1.5 rounded-full shadow hover:bg-background transition-colors"
+          >
+            <RefreshCw className="h-4 w-4 text-foreground" />
+          </button>
+        </div>
+      ) : (
+        <div
+          onClick={() => fileRef.current?.click()}
+          className="border-2 border-dashed border-border rounded-xl aspect-[3/4] flex flex-col items-center justify-center cursor-pointer hover:border-primary hover:bg-primary/5 transition-all active:scale-[0.98]"
+        >
+          <ImagePlus className="h-8 w-8 mb-3 text-muted-foreground" />
+          <span className="text-sm font-medium text-muted-foreground">Upload photo</span>
+          {allowCamera && (
+            <span className="text-xs text-muted-foreground/60 mt-1">or use camera below</span>
+          )}
+        </div>
+      )}
+
+      {/* Hidden inputs */}
+      <input ref={fileRef} type="file" accept="image/*" onChange={handleChange} className="hidden" />
+      <input ref={cameraRef} type="file" accept="image/*" capture="environment" onChange={handleChange} className="hidden" />
+
+      {/* Action buttons */}
+      {!image && (
+        <div className="flex gap-2 mt-1">
+          <button
+            onClick={() => fileRef.current?.click()}
+            className="flex-1 flex items-center justify-center gap-2 py-2 rounded-lg border border-border text-sm font-medium hover:bg-muted transition-colors"
+          >
+            <Upload className="h-4 w-4" />
+            Gallery
+          </button>
+          {allowCamera && (
+            <button
+              onClick={() => cameraRef.current?.click()}
+              className="flex-1 flex items-center justify-center gap-2 py-2 rounded-lg border border-primary/50 text-sm font-medium text-primary hover:bg-primary/10 transition-colors"
+            >
+              <Camera className="h-4 w-4" />
+              Camera
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  );
+};
+
 const VirtualTryOn = () => {
   const location = useLocation();
   const navState = location.state as { clothImage?: string; clothName?: string } | null;
-  
+
   const [clothImage, setClothImage] = useState<string | null>(navState?.clothImage || null);
   const [modelImage, setModelImage] = useState<string | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -28,56 +135,30 @@ const VirtualTryOn = () => {
   const [loadingMessage, setLoadingMessage] = useState(loadingMessages[0]);
   const { toast } = useToast();
 
-  const clothInputRef = useRef<HTMLInputElement>(null);
-  const modelInputRef = useRef<HTMLInputElement>(null);
-
-  const handleImageUpload = (
-    e: React.ChangeEvent<HTMLInputElement>,
-    setImage: React.Dispatch<React.SetStateAction<string | null>>
-  ) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onload = () => {
-        setImage(reader.result as string);
-      };
-      reader.readAsDataURL(file);
-    }
-  };
-
-  // Progress animation effect
+  // Progress animation
   useEffect(() => {
     if (!isProcessing) {
       setProgress(0);
       setLoadingMessage(loadingMessages[0]);
       return;
     }
-
     const progressInterval = setInterval(() => {
       setProgress((prev) => {
         if (prev >= 95) return prev;
-        const increment = Math.random() * 8 + 2;
-        return Math.min(prev + increment, 95);
+        return Math.min(prev + Math.random() * 8 + 2, 95);
       });
     }, 500);
-
     const messageInterval = setInterval(() => {
       setLoadingMessage((prev) => {
-        const currentIndex = loadingMessages.indexOf(prev);
-        const nextIndex = (currentIndex + 1) % loadingMessages.length;
-        return loadingMessages[nextIndex];
+        const i = loadingMessages.indexOf(prev);
+        return loadingMessages[(i + 1) % loadingMessages.length];
       });
     }, 2500);
-
-    return () => {
-      clearInterval(progressInterval);
-      clearInterval(messageInterval);
-    };
+    return () => { clearInterval(progressInterval); clearInterval(messageInterval); };
   }, [isProcessing]);
 
   const handleTryOn = async () => {
     if (!clothImage || !modelImage) return;
-
     setIsProcessing(true);
     setResult(null);
     setLastError(null);
@@ -87,22 +168,14 @@ const VirtualTryOn = () => {
       const { data, error } = await supabase.functions.invoke("virtual-tryon", {
         body: { clothImage, modelImage },
       });
-
       if (error) throw error;
-
       setProgress(100);
-
       if (data?.image) {
         if (data.image === clothImage || data.image === modelImage) {
-          throw new Error(
-            "Try-on failed (the AI returned an input image). Please try a clearer garment photo or a different model photo."
-          );
+          throw new Error("Try-on failed (the AI returned an input image). Please try a clearer photo.");
         }
         setResult(data.image);
-        toast({
-          title: "Success!",
-          description: "Virtual try-on completed successfully.",
-        });
+        toast({ title: "Success!", description: "Virtual try-on completed." });
       } else if (data?.error) {
         throw new Error(data.error);
       } else {
@@ -110,8 +183,6 @@ const VirtualTryOn = () => {
       }
     } catch (error: any) {
       const status = error?.context?.status ?? error?.status;
-
-      // Try to extract backend error message body (often JSON)
       let backendMsg: string | undefined;
       let retryAfterSeconds: number | undefined;
       const bodyText = error?.context?.body;
@@ -120,212 +191,149 @@ const VirtualTryOn = () => {
           const parsed = JSON.parse(bodyText);
           if (typeof parsed?.error === "string") backendMsg = parsed.error;
           if (typeof parsed?.retryAfterSeconds === "number") retryAfterSeconds = parsed.retryAfterSeconds;
-        } catch {
-          // ignore
-        }
+        } catch { /* ignore */ }
       }
-
       const retryHint = retryAfterSeconds ? ` Try again in ~${retryAfterSeconds}s.` : "";
-
       const message =
-        status === 429
-          ? (backendMsg ? `${backendMsg}${retryHint}` : `Too many requests right now. Please try again later.${retryHint}`)
-          : status === 401
-          ? "Please log in to use the virtual try-on feature."
-          : backendMsg || error?.message || "Failed to process virtual try-on. Please try again.";
-
-      console.error("Try-on error:", { status });
+        status === 429 ? (backendMsg ? `${backendMsg}${retryHint}` : `Too many requests. Try again later.${retryHint}`)
+        : status === 401 ? "Please log in to use virtual try-on."
+        : backendMsg || error?.message || "Failed to process. Please try again.";
       setLastError(message);
-
-      toast({
-        title: "Error",
-        description: message,
-        variant: "destructive",
-      });
+      toast({ title: "Error", description: message, variant: "destructive" });
     } finally {
       setIsProcessing(false);
     }
   };
 
+  const ready = !!clothImage && !!modelImage && !isProcessing;
+
   return (
-    <div className="min-h-screen bg-[hsl(210_11%_15%)] text-[hsl(0_0%_90%)]">
+    <div className="min-h-screen bg-background text-foreground pb-24">
       {/* Header */}
-      <header className="py-6 text-center border-b border-[hsl(210_11%_25%)]">
-        <h1 className="text-3xl md:text-4xl font-semibold">
-          Virtual Cloth Assistant
-        </h1>
-        <Link
-          to="/"
-          className="absolute top-6 left-6 text-[hsl(0_0%_70%)] hover:text-[hsl(0_0%_100%)] transition-colors text-sm"
-        >
-          ← Back to Store
-        </Link>
+      <header className="sticky top-0 z-40 bg-background/90 backdrop-blur-md border-b border-border">
+        <div className="flex items-center justify-between px-4 h-14">
+          <Link to="/" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
+            ← Back
+          </Link>
+          <h1 className="text-base font-semibold flex items-center gap-1.5">
+            <Sparkles className="h-4 w-4 text-primary" />
+            Virtual Try-On
+          </h1>
+          <div className="w-10" />
+        </div>
       </header>
 
-      {/* Hero */}
-      <section className="text-center py-10 px-4">
-        <p className="text-lg text-[hsl(0_0%_60%)] max-w-2xl mx-auto">
-          Wanna try out how that cloth suits you?
-          <br />
-          Upgrade your shopping experience with an intelligent trial room.
+      <main className="max-w-2xl mx-auto px-4 py-6 space-y-6">
+        {/* Subtitle */}
+        <p className="text-center text-sm text-muted-foreground">
+          Upload a garment photo &amp; your photo — AI will dress you in seconds.
         </p>
-        <div className="w-16 h-1 bg-primary mx-auto mt-6" />
-      </section>
 
-      {/* Upload Section */}
-      <section className="max-w-5xl mx-auto px-4 py-8">
-        <div className="grid md:grid-cols-2 gap-8">
-          {/* Cloth Image Upload */}
-          <div>
-            <h3 className="text-center mb-4 font-medium">Cloth Image</h3>
-            <div
-              onClick={() => clothInputRef.current?.click()}
-              className="border-2 border-dashed border-[hsl(210_11%_35%)] rounded-lg p-8 min-h-[200px] flex flex-col items-center justify-center cursor-pointer hover:border-primary transition-colors"
-            >
-              {clothImage ? (
-                <img
-                  src={clothImage}
-                  alt="Cloth"
-                  className="max-h-48 object-contain rounded"
-                />
-              ) : (
-                <>
-                  <Upload className="h-8 w-8 mb-2 text-[hsl(0_0%_50%)]" />
-                  <span className="text-[hsl(0_0%_50%)]">Choose File</span>
-                </>
-              )}
-            </div>
-            <input
-              ref={clothInputRef}
-              type="file"
-              accept="image/*"
-              onChange={(e) => handleImageUpload(e, setClothImage)}
-              className="hidden"
-            />
-          </div>
-
-          {/* Model Image Upload */}
-          <div>
-            <h3 className="text-center mb-4 font-medium">Model Image</h3>
-            <div
-              onClick={() => modelInputRef.current?.click()}
-              className="border-2 border-dashed border-[hsl(210_11%_35%)] rounded-lg p-8 min-h-[200px] flex flex-col items-center justify-center cursor-pointer hover:border-primary transition-colors"
-            >
-              {modelImage ? (
-                <img
-                  src={modelImage}
-                  alt="Model"
-                  className="max-h-48 object-contain rounded"
-                />
-              ) : (
-                <>
-                  <Upload className="h-8 w-8 mb-2 text-[hsl(0_0%_50%)]" />
-                  <span className="text-[hsl(0_0%_50%)]">Choose File</span>
-                </>
-              )}
-            </div>
-            <input
-              ref={modelInputRef}
-              type="file"
-              accept="image/*"
-              onChange={(e) => handleImageUpload(e, setModelImage)}
-              className="hidden"
-            />
-          </div>
+        {/* Upload grid */}
+        <div className="grid grid-cols-2 gap-4">
+          <UploadZone
+            label="Garment"
+            image={clothImage}
+            onFile={setClothImage}
+            onClear={() => setClothImage(null)}
+            allowCamera={false}
+          />
+          <UploadZone
+            label="Your Photo"
+            image={modelImage}
+            onFile={setModelImage}
+            onClear={() => setModelImage(null)}
+            allowCamera={true}
+          />
         </div>
 
-        {/* Try It Button */}
-        <div className="mt-8 flex flex-wrap gap-4 justify-center">
-          <Button
-            onClick={handleTryOn}
-            disabled={!clothImage || !modelImage || isProcessing}
-            className="bg-primary hover:bg-primary/90 text-primary-foreground px-8 py-6 rounded-lg font-medium"
-          >
-            {isProcessing ? (
-              <>
-                <Sparkles className="mr-2 h-5 w-5 animate-spin" />
-                Processing...
-              </>
-            ) : (
-              <>
-                AI Try-On <Sparkles className="ml-2 h-5 w-5" />
-              </>
-            )}
-          </Button>
+        {/* Tips */}
+        <div className="bg-muted/50 rounded-xl px-4 py-3 text-xs text-muted-foreground space-y-1">
+          <p className="font-medium text-foreground text-sm mb-1">💡 Tips for best results</p>
+          <p>• Use a clear, front-facing garment image on a plain background</p>
+          <p>• Use a full-body or upper-body photo with good lighting</p>
+          <p>• Images are compressed automatically for faster processing</p>
         </div>
-      </section>
 
-      {/* Result Section */}
-      <section className="max-w-3xl mx-auto px-4 py-12 text-center">
-        <h2 className="text-2xl font-bold mb-8 tracking-wide">
-          HERE IS YOUR RESULT
-        </h2>
-        
-        {isProcessing ? (
-          <div className="bg-[hsl(210_11%_20%)] rounded-lg p-8 animate-fade-in">
-            <div className="flex flex-col items-center gap-6">
-              {/* Animated sparkles */}
-              <div className="relative w-24 h-24">
-                <div className="absolute inset-0 flex items-center justify-center">
-                  <Sparkles className="w-12 h-12 text-primary animate-pulse" />
-                </div>
-                <div className="absolute inset-0 animate-spin" style={{ animationDuration: '3s' }}>
-                  <Sparkles className="w-6 h-6 text-primary/50 absolute top-0 left-1/2 -translate-x-1/2" />
-                  <Sparkles className="w-6 h-6 text-primary/50 absolute bottom-0 left-1/2 -translate-x-1/2" />
-                  <Sparkles className="w-6 h-6 text-primary/50 absolute left-0 top-1/2 -translate-y-1/2" />
-                  <Sparkles className="w-6 h-6 text-primary/50 absolute right-0 top-1/2 -translate-y-1/2" />
+        {/* CTA Button */}
+        <Button
+          onClick={handleTryOn}
+          disabled={!ready}
+          className="w-full h-14 text-base font-semibold rounded-xl shadow-lg"
+        >
+          {isProcessing ? (
+            <>
+              <Sparkles className="mr-2 h-5 w-5 animate-spin" />
+              Processing…
+            </>
+          ) : (
+            <>
+              <Sparkles className="mr-2 h-5 w-5" />
+              Try it on — AI Magic
+            </>
+          )}
+        </Button>
+
+        {/* Processing state */}
+        {isProcessing && (
+          <div className="bg-muted rounded-xl p-6 space-y-4 animate-fade-in">
+            <div className="flex items-center justify-center">
+              <div className="relative w-16 h-16">
+                <Sparkles className="absolute inset-0 m-auto w-8 h-8 text-primary animate-pulse" />
+                <div className="absolute inset-0 animate-spin" style={{ animationDuration: "3s" }}>
+                  <Sparkles className="w-4 h-4 text-primary/40 absolute top-0 left-1/2 -translate-x-1/2" />
+                  <Sparkles className="w-4 h-4 text-primary/40 absolute bottom-0 left-1/2 -translate-x-1/2" />
+                  <Sparkles className="w-4 h-4 text-primary/40 absolute left-0 top-1/2 -translate-y-1/2" />
+                  <Sparkles className="w-4 h-4 text-primary/40 absolute right-0 top-1/2 -translate-y-1/2" />
                 </div>
               </div>
-              
-              {/* Loading message */}
-              <p className="text-[hsl(0_0%_70%)] text-lg font-medium animate-pulse">
-                {loadingMessage}
-              </p>
-              
-              {/* Progress bar */}
-              <div className="w-full max-w-md space-y-2">
-                <Progress value={progress} className="h-2" />
-                <p className="text-[hsl(0_0%_50%)] text-sm">
-                  {Math.round(progress)}% complete
-                </p>
-              </div>
-              
-              {/* Tip */}
-              <p className="text-[hsl(0_0%_40%)] text-xs mt-4">
-                AI is generating your virtual try-on. This may take a moment...
-              </p>
             </div>
+            <p className="text-center text-sm font-medium animate-pulse">{loadingMessage}</p>
+            <Progress value={progress} className="h-2" />
+            <p className="text-center text-xs text-muted-foreground">{Math.round(progress)}% complete</p>
           </div>
-        ) : result ? (
-          <div className="bg-[hsl(210_11%_20%)] rounded-lg p-8 animate-fade-in">
-            <img
-              src={result}
-              alt="Try-on result"
-              className="max-h-96 mx-auto rounded-lg shadow-lg"
-            />
-            <p className="mt-4 text-[hsl(0_0%_60%)] text-sm">
-              Virtual try-on preview
-            </p>
+        )}
+
+        {/* Result */}
+        {!isProcessing && result && (
+          <div className="space-y-3 animate-fade-in">
+            <h2 className="text-center font-semibold text-lg">Your Result ✨</h2>
+            <div className="rounded-xl overflow-hidden border border-border shadow-lg">
+              <img src={result} alt="Try-on result" className="w-full object-contain" />
+            </div>
             <a
               href={result}
-              download="virtual-tryon-result.png"
-              className="inline-flex items-center gap-2 mt-4 px-4 py-2 bg-primary hover:bg-primary/90 text-primary-foreground rounded-lg font-medium transition-colors"
+              download="virtual-tryon-result.jpg"
+              className="flex items-center justify-center gap-2 w-full py-3 rounded-xl border border-primary text-primary font-medium hover:bg-primary/10 transition-colors"
             >
               <Download className="h-4 w-4" />
               Download Result
             </a>
-          </div>
-        ) : lastError ? (
-          <div className="bg-[hsl(210_11%_20%)] rounded-lg p-8 animate-fade-in">
-            <p className="text-[hsl(0_0%_80%)] font-medium">Could not generate a result</p>
-            <p className="mt-2 text-[hsl(0_0%_60%)] text-sm">{lastError}</p>
-          </div>
-        ) : (
-          <div className="bg-[hsl(210_11%_20%)] rounded-lg p-12 text-[hsl(0_0%_50%)]">
-            <p>Upload both images and click a button above to see the result</p>
+            <Button
+              variant="outline"
+              className="w-full"
+              onClick={() => { setResult(null); setModelImage(null); setClothImage(null); }}
+            >
+              Try Another
+            </Button>
           </div>
         )}
-      </section>
+
+        {/* Error */}
+        {!isProcessing && !result && lastError && (
+          <div className="bg-destructive/10 border border-destructive/30 rounded-xl p-4 animate-fade-in">
+            <p className="font-medium text-sm text-destructive">Could not generate result</p>
+            <p className="mt-1 text-xs text-muted-foreground">{lastError}</p>
+          </div>
+        )}
+
+        {/* Empty placeholder */}
+        {!isProcessing && !result && !lastError && (
+          <div className="border border-dashed border-border rounded-xl p-8 text-center text-muted-foreground text-sm">
+            Your try-on result will appear here
+          </div>
+        )}
+      </main>
     </div>
   );
 };

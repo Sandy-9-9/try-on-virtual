@@ -6,7 +6,7 @@ const corsHeaders = {
 };
 
 const PROMPT =
-  "VIRTUAL TRY-ON TASK: I am giving you exactly two images. Image 1 = a photo of a PERSON. Image 2 = a photo of a CLOTHING GARMENT (e.g. shirt, dress, saree, jacket). You MUST generate a BRAND NEW photorealistic image where the person from Image 1 is realistically WEARING the garment from Image 2. CRITICAL RULES: 1) Keep the person's face, skin tone, hair, body shape, pose, and background EXACTLY as in Image 1. 2) REMOVE the person's original clothing and REPLACE it with the garment from Image 2. Do NOT simply paste/overlay the garment on top — you must warp and fit it to the person's body. 3) The garment must follow the person's body contours: match shoulder width, chest, waist, hips, and arm positions. 4) Apply realistic fabric physics: natural draping, folds, creases at elbows/waist, proper shadows underneath. 5) Blend garment edges seamlessly with skin and background — no visible cutout edges. 6) Match the lighting direction and color temperature from Image 1. 7) Output exactly ONE new photorealistic full image. Do NOT return either of the original input images.";
+  "VIRTUAL CLOTHING TRY-ON: Two images provided. Image 1 = PERSON photo. Image 2 = GARMENT photo. Generate ONE new photorealistic image of this exact person wearing this exact garment. IMPORTANT: Do NOT overlay or paste the garment image onto the person. Instead, completely RE-RENDER the person wearing the garment naturally — the garment must be warped, reshaped, and fitted to match the person's body shape, pose, and proportions. Remove the person's original clothes and replace with this garment. Keep face, hair, skin, pose, and background identical to Image 1. Apply realistic fabric draping, shadows, and wrinkles. Output only the final composed image.";
 
 // Allowed MIME types for images
 const ALLOWED_MIME_TYPES = ["image/png", "image/jpeg", "image/jpg", "image/webp"];
@@ -137,7 +137,7 @@ async function callLovableGateway(apiKey: string, modelImage: string, clothImage
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      model: "google/gemini-3-pro-image-preview",
+      model: "google/gemini-2.5-flash-image",
       messages: [
         {
           role: "user",
@@ -148,7 +148,7 @@ async function callLovableGateway(apiKey: string, modelImage: string, clothImage
           ],
         },
       ],
-      modalities: ["text", "image"],
+      modalities: ["image", "text"],
     }),
   });
 

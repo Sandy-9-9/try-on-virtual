@@ -6,7 +6,7 @@ const corsHeaders = {
 };
 
 const PROMPT =
-  "VIRTUAL CLOTHING TRY-ON: Two images provided. Image 1 = PERSON photo. Image 2 = GARMENT photo. Generate ONE new photorealistic image of this exact person wearing this exact garment. IMPORTANT: Do NOT overlay or paste the garment image onto the person. Instead, completely RE-RENDER the person wearing the garment naturally — the garment must be warped, reshaped, and fitted to match the person's body shape, pose, and proportions. Remove the person's original clothes and replace with this garment. Keep face, hair, skin, pose, and background identical to Image 1. Apply realistic fabric draping, shadows, and wrinkles. Output only the final composed image.";
+  "Virtual try-on: Image 1 is a person, Image 2 is a garment. Generate a new photorealistic image of this person wearing this garment. Fit the garment to their body naturally with proper draping and shadows. Keep face, hair, pose, and background from Image 1. Output one image only.";
 
 // Allowed MIME types for images
 const ALLOWED_MIME_TYPES = ["image/png", "image/jpeg", "image/jpg", "image/webp"];
@@ -137,7 +137,7 @@ async function callLovableGateway(apiKey: string, modelImage: string, clothImage
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      model: "google/gemini-2.5-flash-image",
+      model: "google/gemini-3-pro-image-preview",
       messages: [
         {
           role: "user",

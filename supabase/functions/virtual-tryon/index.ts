@@ -128,12 +128,9 @@ async function toInlineData(input: string): Promise<{ mime_type: string; data: s
 }
 
 async function callLovableGateway(apiKey: string, modelImage: string, clothImage: string): Promise<TryOnResult> {
-  console.log("Processing virtual try-on with Lovable AI Gateway (images endpoint)...");
+  console.log("Processing virtual try-on with Lovable AI Gateway...");
 
-  // Build a text prompt that references the two images
-  const fullPrompt = `${PROMPT}\n\nFirst image (person/model): see attached image 1.\nSecond image (garment): see attached image 2.`;
-
-  const response = await fetch("https://ai.gateway.lovable.dev/v1/images/generations", {
+  const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
     method: "POST",
     headers: {
       Authorization: `Bearer ${apiKey}`,
@@ -141,10 +138,17 @@ async function callLovableGateway(apiKey: string, modelImage: string, clothImage
     },
     body: JSON.stringify({
       model: "google/gemini-2.5-flash-image",
-      prompt: fullPrompt,
-      image: [modelImage, clothImage],
-      n: 1,
-      size: "768x1024",
+      messages: [
+        {
+          role: "user",
+          content: [
+            { type: "text", text: PROMPT },
+            { type: "image_url", image_url: { url: modelImage } },
+            { type: "image_url", image_url: { url: clothImage } },
+          ],
+        },
+      ],
+      modalities: ["text", "image"],
     }),
   });
 
@@ -159,35 +163,82 @@ async function callLovableGateway(apiKey: string, modelImage: string, clothImage
   }
 
   const data = await response.json();
+  // Log full response structure for debugging
+  console.log("Gateway full response keys:", JSON.stringify(Object.keys(data)));
 
-  // Images generations endpoint returns { data: [{ url: "..." }, ...] }
-  const imageUrl = data?.data?.[0]?.url;
-  if (imageUrl) {
-    // If it's a data URL, return directly; if it's an HTTP URL, fetch and convert
-    if (imageUrl.startsWith("data:")) {
-      return { image: imageUrl };
+  const choices = data.choices || [];
+  for (const choice of choices) {
+    const msg = choice?.message;
+    if (!msg) continue;
+
+    console.log("Message keys:", JSON.stringify(Object.keys(msg)));
+
+    // 1. Check msg.image (some gateway versions return image directly)
+    if (msg.image && typeof msg.image === "string" && msg.image.startsWith("data:")) {
+      return { image: msg.image };
     }
-    // Fetch the URL and convert to data URL
-    try {
-      const imgRes = await fetch(imageUrl);
-      if (imgRes.ok) {
-        const buf = await imgRes.arrayBuffer();
-        const contentType = imgRes.headers.get("content-type") || "image/png";
-        const base64 = arrayBufferToBase64(buf);
-        return { image: `data:${contentType.split(";")[0]};base64,${base64}` };
+
+    // 2. Check msg.images array
+    if (Array.isArray(msg.images)) {
+      for (const img of msg.images) {
+        const url = img?.image_url?.url || img?.url || (typeof img === "string" ? img : null);
+        if (url && typeof url === "string" && url.startsWith("data:")) {
+          return { image: url };
+        }
       }
-    } catch (e) {
-      console.error("Failed to fetch generated image URL:", e);
+    }
+
+    // 3. Check content as array of parts
+    if (Array.isArray(msg.content)) {
+      for (const part of msg.content) {
+        // image_url type
+        if (part?.type === "image_url" && part?.image_url?.url) {
+          const url = part.image_url.url;
+          if (url.startsWith("data:")) return { image: url };
+          if (url.startsWith("http")) {
+            try {
+              const r = await fetch(url);
+              if (r.ok) {
+                const buf = await r.arrayBuffer();
+                const ct = r.headers.get("content-type") || "image/png";
+                return { image: `data:${ct.split(";")[0]};base64,${arrayBufferToBase64(buf)}` };
+              }
+            } catch { /* continue */ }
+          }
+        }
+        // inline_data type
+        const inline = part?.inlineData || part?.inline_data;
+        if (inline) {
+          const mt = inline.mimeType || inline.mime_type;
+          const d = inline.data;
+          if (typeof mt === "string" && mt.startsWith("image/") && typeof d === "string") {
+            return { image: `data:${mt};base64,${d}` };
+          }
+        }
+      }
+    }
+
+    // 4. Check content as base64 string directly
+    if (typeof msg.content === "string" && msg.content.startsWith("data:image")) {
+      return { image: msg.content };
+    }
+
+    // 5. Check parts array (Gemini native format)
+    const parts = msg.parts || [];
+    for (const part of parts) {
+      const inline = part?.inlineData || part?.inline_data;
+      if (inline) {
+        const mt = inline.mimeType || inline.mime_type;
+        const d = inline.data;
+        if (typeof mt === "string" && mt.startsWith("image/") && typeof d === "string") {
+          return { image: `data:${mt};base64,${d}` };
+        }
+      }
     }
   }
 
-  // Also check b64_json format
-  const b64 = data?.data?.[0]?.b64_json;
-  if (b64) {
-    return { image: `data:image/png;base64,${b64}` };
-  }
-
-  console.error("Gateway response structure:", JSON.stringify(data).slice(0, 500));
+  // Log truncated response for debugging
+  console.error("Gateway response (no image found):", JSON.stringify(data).slice(0, 1000));
   return { status: 500, error: "No image generated by gateway", kind: "unknown" };
 }
 

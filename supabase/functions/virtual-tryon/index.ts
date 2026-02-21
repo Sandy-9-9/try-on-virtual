@@ -6,7 +6,7 @@ const corsHeaders = {
 };
 
 const PROMPT =
-  "Virtual try-on: Image 1 is a person, Image 2 is a garment. Generate a new photorealistic image of this person wearing this garment. Fit the garment to their body naturally with proper draping and shadows. Keep face, hair, pose, and background from Image 1. Output one image only.";
+  "You are an expert fashion AI. I provide two images: IMAGE 1 is a person's photo, IMAGE 2 is a clothing garment. YOUR TASK: Create a completely new photorealistic image where you REDRAW the person from IMAGE 1 but now wearing the garment from IMAGE 2. CRITICAL INSTRUCTIONS: You must NOT copy-paste or overlay the garment image onto the person. Instead, you must REGENERATE the entire person's torso area with the new garment fitted naturally to their body shape. The garment must conform to the person's shoulders, arms, chest, and waist. Add natural wrinkles, folds, and shadows where the fabric bends. The person's face, hair, hands, lower body, and background must remain IDENTICAL to IMAGE 1. The final image should look like a real photograph taken of this person actually wearing this garment — not a photoshopped composite.";
 
 // Allowed MIME types for images
 const ALLOWED_MIME_TYPES = ["image/png", "image/jpeg", "image/jpg", "image/webp"];

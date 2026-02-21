@@ -6,7 +6,7 @@ const corsHeaders = {
 };
 
 const PROMPT =
-  "You are a virtual try-on AI. I am providing two images: the FIRST image is the person (model photo), and the SECOND image is the clothing/garment item. Your task: Generate a brand NEW photorealistic image showing the person from the FIRST image wearing the garment from the SECOND image. You MUST output a new generated image — never return the original input images. Requirements: 1) Preserve the person's exact face, skin tone, hair, body shape, pose, and background from the FIRST image. 2) Replace only the clothing — fit the garment precisely to body contours matching shoulder width, chest, waist, and arm positions. 3) Apply realistic fabric physics: natural draping, creases at joints, proper shadows. 4) Blend garment edges seamlessly with skin and background. 5) Match lighting and color temperature from the FIRST image. Output exactly ONE new photorealistic result image.";
+  "VIRTUAL TRY-ON TASK: I am giving you exactly two images. Image 1 = a photo of a PERSON. Image 2 = a photo of a CLOTHING GARMENT (e.g. shirt, dress, saree, jacket). You MUST generate a BRAND NEW photorealistic image where the person from Image 1 is realistically WEARING the garment from Image 2. CRITICAL RULES: 1) Keep the person's face, skin tone, hair, body shape, pose, and background EXACTLY as in Image 1. 2) REMOVE the person's original clothing and REPLACE it with the garment from Image 2. Do NOT simply paste/overlay the garment on top — you must warp and fit it to the person's body. 3) The garment must follow the person's body contours: match shoulder width, chest, waist, hips, and arm positions. 4) Apply realistic fabric physics: natural draping, folds, creases at elbows/waist, proper shadows underneath. 5) Blend garment edges seamlessly with skin and background — no visible cutout edges. 6) Match the lighting direction and color temperature from Image 1. 7) Output exactly ONE new photorealistic full image. Do NOT return either of the original input images.";
 
 // Allowed MIME types for images
 const ALLOWED_MIME_TYPES = ["image/png", "image/jpeg", "image/jpg", "image/webp"];
@@ -137,7 +137,7 @@ async function callLovableGateway(apiKey: string, modelImage: string, clothImage
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      model: "google/gemini-2.5-flash-image",
+      model: "google/gemini-3-pro-image-preview",
       messages: [
         {
           role: "user",

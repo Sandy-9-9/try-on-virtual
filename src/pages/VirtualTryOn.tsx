@@ -1,9 +1,10 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { Upload, Sparkles, Download, Camera, RefreshCw, ImagePlus } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Link, useLocation } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/context/AuthContext";
 import { Progress } from "@/components/ui/progress";
 
 const loadingMessages = [
@@ -124,6 +125,8 @@ const UploadZone = ({ label, image, onFile, onClear, allowCamera = true }: Uploa
 
 const VirtualTryOn = () => {
   const location = useLocation();
+  const navigate = useNavigate();
+  const { user, loading: authLoading } = useAuth();
   const navState = location.state as { clothImage?: string; clothName?: string } | null;
 
   const [clothImage, setClothImage] = useState<string | null>(null);
@@ -182,6 +185,11 @@ const VirtualTryOn = () => {
 
   const handleTryOn = async () => {
     if (!clothImage || !modelImage) return;
+    if (!user) {
+      toast({ title: "Login required", description: "Please log in to use virtual try-on.", variant: "destructive" });
+      navigate("/login", { state: { from: "/try-on" } });
+      return;
+    }
     setIsProcessing(true);
     setResult(null);
     setLastError(null);

@@ -185,11 +185,6 @@ const VirtualTryOn = () => {
 
   const handleTryOn = async () => {
     if (!clothImage || !modelImage) return;
-    if (!user) {
-      toast({ title: "Login required", description: "Please log in to use virtual try-on.", variant: "destructive" });
-      navigate("/login", { state: { from: "/try-on" } });
-      return;
-    }
     setIsProcessing(true);
     setResult(null);
     setLastError(null);

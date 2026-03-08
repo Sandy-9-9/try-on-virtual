@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { Upload, Sparkles, Download, Camera, RefreshCw, ImagePlus } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Link, useLocation, useNavigate } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 
@@ -125,7 +125,7 @@ const UploadZone = ({ label, image, onFile, onClear, allowCamera = true }: Uploa
 
 const VirtualTryOn = () => {
   const location = useLocation();
-  const navigate = useNavigate();
+  
   
   const navState = location.state as { clothImage?: string; clothName?: string } | null;
 

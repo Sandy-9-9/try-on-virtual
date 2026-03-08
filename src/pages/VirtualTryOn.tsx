@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { useAuth } from "@/context/AuthContext";
+
 import { Progress } from "@/components/ui/progress";
 
 const loadingMessages = [
@@ -126,7 +126,7 @@ const UploadZone = ({ label, image, onFile, onClear, allowCamera = true }: Uploa
 const VirtualTryOn = () => {
   const location = useLocation();
   const navigate = useNavigate();
-  const { user, loading: authLoading } = useAuth();
+  
   const navState = location.state as { clothImage?: string; clothName?: string } | null;
 
   const [clothImage, setClothImage] = useState<string | null>(null);

@@ -1,10 +1,9 @@
 import { useState, useRef, useEffect, useCallback } from "react";
-import { Upload, Sparkles, Download, Camera, RefreshCw, ImagePlus } from "lucide-react";
+import { Upload, Sparkles, Download, Camera, RefreshCw, ImagePlus, Plus, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Link, useLocation } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-
 import { Progress } from "@/components/ui/progress";
 
 const loadingMessages = [
@@ -16,7 +15,6 @@ const loadingMessages = [
   "Generating final result...",
 ];
 
-/** Compress a data-URL to JPEG at target quality/size for faster uploads */
 async function compressImage(dataUrl: string, maxDim = 768, quality = 0.82): Promise<string> {
   return new Promise((resolve, reject) => {
     const img = new Image();
@@ -38,15 +36,23 @@ async function compressImage(dataUrl: string, maxDim = 768, quality = 0.82): Pro
   });
 }
 
+interface GarmentSlot {
+  id: string;
+  label: string;
+  image: string | null;
+}
+
 interface UploadZoneProps {
   label: string;
   image: string | null;
   onFile: (dataUrl: string) => void;
   onClear: () => void;
   allowCamera?: boolean;
+  onRemoveSlot?: () => void;
+  canRemove?: boolean;
 }
 
-const UploadZone = ({ label, image, onFile, onClear, allowCamera = true }: UploadZoneProps) => {
+const UploadZone = ({ label, image, onFile, onClear, allowCamera = true, onRemoveSlot, canRemove }: UploadZoneProps) => {
   const fileRef = useRef<HTMLInputElement>(null);
   const cameraRef = useRef<HTMLInputElement>(null);
 
@@ -63,13 +69,19 @@ const UploadZone = ({ label, image, onFile, onClear, allowCamera = true }: Uploa
       }
     };
     reader.readAsDataURL(file);
-    // reset so same file can be reselected
     e.target.value = "";
   };
 
   return (
     <div className="flex flex-col gap-2">
-      <h3 className="text-center text-sm font-semibold uppercase tracking-widest text-muted-foreground">{label}</h3>
+      <div className="flex items-center justify-center gap-1">
+        <h3 className="text-center text-sm font-semibold uppercase tracking-widest text-muted-foreground">{label}</h3>
+        {canRemove && onRemoveSlot && (
+          <button onClick={onRemoveSlot} className="p-0.5 rounded-full hover:bg-destructive/10 transition-colors">
+            <X className="h-3.5 w-3.5 text-muted-foreground hover:text-destructive" />
+          </button>
+        )}
+      </div>
 
       {image ? (
         <div className="relative rounded-xl overflow-hidden border border-border bg-muted aspect-[3/4]">
@@ -94,11 +106,9 @@ const UploadZone = ({ label, image, onFile, onClear, allowCamera = true }: Uploa
         </div>
       )}
 
-      {/* Hidden inputs */}
       <input ref={fileRef} type="file" accept="image/*" onChange={handleChange} className="hidden" />
       <input ref={cameraRef} type="file" accept="image/*" capture="environment" onChange={handleChange} className="hidden" />
 
-      {/* Action buttons */}
       {!image && (
         <div className="flex gap-2 mt-1">
           <button
@@ -123,37 +133,68 @@ const UploadZone = ({ label, image, onFile, onClear, allowCamera = true }: Uploa
   );
 };
 
+let slotCounter = 0;
+const makeSlot = (label: string, image: string | null = null): GarmentSlot => ({
+  id: `slot-${++slotCounter}`,
+  label,
+  image,
+});
+
 const VirtualTryOn = () => {
   const location = useLocation();
-  
-  
   const navState = location.state as { clothImage?: string; clothName?: string } | null;
 
-  const [clothImage, setClothImage] = useState<string | null>(null);
+  const [garmentSlots, setGarmentSlots] = useState<GarmentSlot[]>([
+    makeSlot("Shirt / Top"),
+  ]);
   const [modelImage, setModelImage] = useState<string | null>(null);
 
-  // Convert nav-state image (local path or any URL) to a data URL on mount
+  // Convert nav-state image on mount
   useEffect(() => {
     const raw = navState?.clothImage;
     if (!raw) return;
-    if (raw.startsWith("data:")) { setClothImage(raw); return; }
-    // Fetch the image and convert to data URL
+    const processImage = async (dataUrl: string) => {
+      try {
+        return await compressImage(dataUrl);
+      } catch {
+        return dataUrl;
+      }
+    };
+
+    if (raw.startsWith("data:")) {
+      processImage(raw).then((compressed) => {
+        setGarmentSlots((prev) => {
+          const next = [...prev];
+          next[0] = { ...next[0], image: compressed };
+          return next;
+        });
+      });
+      return;
+    }
+
     fetch(raw)
       .then((r) => r.blob())
       .then((blob) => {
         const reader = new FileReader();
         reader.onload = async () => {
-          try {
-            const compressed = await compressImage(reader.result as string);
-            setClothImage(compressed);
-          } catch {
-            setClothImage(reader.result as string);
-          }
+          const compressed = await processImage(reader.result as string);
+          setGarmentSlots((prev) => {
+            const next = [...prev];
+            next[0] = { ...next[0], image: compressed };
+            return next;
+          });
         };
         reader.readAsDataURL(blob);
       })
-      .catch(() => setClothImage(raw)); // fallback: keep as-is
+      .catch(() => {
+        setGarmentSlots((prev) => {
+          const next = [...prev];
+          next[0] = { ...next[0], image: raw };
+          return next;
+        });
+      });
   }, []);
+
   const [isProcessing, setIsProcessing] = useState(false);
   const [result, setResult] = useState<string | null>(null);
   const [lastError, setLastError] = useState<string | null>(null);
@@ -183,8 +224,29 @@ const VirtualTryOn = () => {
     return () => { clearInterval(progressInterval); clearInterval(messageInterval); };
   }, [isProcessing]);
 
+  const addGarmentSlot = () => {
+    if (garmentSlots.length >= 3) return;
+    const labels = ["Pants / Bottom", "Accessory / Layer"];
+    const label = labels[garmentSlots.length - 1] || `Garment ${garmentSlots.length + 1}`;
+    setGarmentSlots((prev) => [...prev, makeSlot(label)]);
+  };
+
+  const removeGarmentSlot = (id: string) => {
+    setGarmentSlots((prev) => prev.filter((s) => s.id !== id));
+  };
+
+  const setGarmentImage = (id: string, image: string | null) => {
+    setGarmentSlots((prev) =>
+      prev.map((s) => (s.id === id ? { ...s, image } : s))
+    );
+  };
+
+  const clothImages = garmentSlots.filter((s) => s.image).map((s) => s.image!);
+  const hasAnyGarment = clothImages.length > 0;
+  const ready = hasAnyGarment && !!modelImage && !isProcessing;
+
   const handleTryOn = async () => {
-    if (!clothImage || !modelImage) return;
+    if (!hasAnyGarment || !modelImage) return;
     setIsProcessing(true);
     setResult(null);
     setLastError(null);
@@ -192,14 +254,11 @@ const VirtualTryOn = () => {
 
     try {
       const { data, error } = await supabase.functions.invoke("virtual-tryon", {
-        body: { clothImage, modelImage },
+        body: { clothImages, modelImage },
       });
       if (error) throw error;
       setProgress(100);
       if (data?.image) {
-        if (data.image === clothImage || data.image === modelImage) {
-          throw new Error("Try-on failed (the AI returned an input image). Please try a clearer photo.");
-        }
         setResult(data.image);
         toast({ title: "Success!", description: "Virtual try-on completed." });
       } else if (data?.error) {
@@ -231,11 +290,8 @@ const VirtualTryOn = () => {
     }
   };
 
-  const ready = !!clothImage && !!modelImage && !isProcessing;
-
   return (
     <div className="min-h-screen bg-background text-foreground pb-24">
-      {/* Header */}
       <header className="sticky top-0 z-40 bg-background/90 backdrop-blur-md border-b border-border">
         <div className="flex items-center justify-between px-4 h-14">
           <Link to="/" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
@@ -250,38 +306,69 @@ const VirtualTryOn = () => {
       </header>
 
       <main className="max-w-2xl mx-auto px-4 py-6 space-y-6">
-        {/* Subtitle */}
         <p className="text-center text-sm text-muted-foreground">
-          Upload a garment photo &amp; your photo — AI will dress you in seconds.
+          Upload garment photos (shirt, pants, etc.) &amp; your photo — AI will dress you in seconds.
         </p>
 
-        {/* Upload grid */}
-        <div className="grid grid-cols-2 gap-4">
-          <UploadZone
-            label="Garment"
-            image={clothImage}
-            onFile={setClothImage}
-            onClear={() => setClothImage(null)}
-            allowCamera={false}
-          />
-          <UploadZone
-            label="Your Photo"
-            image={modelImage}
-            onFile={setModelImage}
-            onClear={() => setModelImage(null)}
-            allowCamera={true}
-          />
+        {/* Garment slots */}
+        <div>
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-sm font-medium text-foreground">Garments</span>
+            {garmentSlots.length < 3 && (
+              <button
+                onClick={addGarmentSlot}
+                className="flex items-center gap-1 text-xs font-medium text-primary hover:text-primary/80 transition-colors"
+              >
+                <Plus className="h-3.5 w-3.5" />
+                Add garment
+              </button>
+            )}
+          </div>
+          <div className={`grid gap-4 ${garmentSlots.length === 1 ? "grid-cols-2" : garmentSlots.length === 2 ? "grid-cols-3" : "grid-cols-2 sm:grid-cols-4"}`}>
+            {garmentSlots.map((slot) => (
+              <UploadZone
+                key={slot.id}
+                label={slot.label}
+                image={slot.image}
+                onFile={(img) => setGarmentImage(slot.id, img)}
+                onClear={() => setGarmentImage(slot.id, null)}
+                allowCamera={false}
+                canRemove={garmentSlots.length > 1}
+                onRemoveSlot={() => removeGarmentSlot(slot.id)}
+              />
+            ))}
+            {garmentSlots.length === 1 && (
+              <UploadZone
+                label="Your Photo"
+                image={modelImage}
+                onFile={setModelImage}
+                onClear={() => setModelImage(null)}
+                allowCamera={true}
+              />
+            )}
+          </div>
+          {/* Model photo in separate row when multiple garments */}
+          {garmentSlots.length > 1 && (
+            <div className="mt-4 max-w-[200px] mx-auto">
+              <UploadZone
+                label="Your Photo"
+                image={modelImage}
+                onFile={setModelImage}
+                onClear={() => setModelImage(null)}
+                allowCamera={true}
+              />
+            </div>
+          )}
         </div>
 
         {/* Tips */}
         <div className="bg-muted/50 rounded-xl px-4 py-3 text-xs text-muted-foreground space-y-1">
           <p className="font-medium text-foreground text-sm mb-1">💡 Tips for best results</p>
-          <p>• Use a clear, front-facing garment image on a plain background</p>
-          <p>• Use a full-body or upper-body photo with good lighting</p>
-          <p>• Images are compressed automatically for faster processing</p>
+          <p>• Use clear, front-facing garment images on a plain background</p>
+          <p>• You can add shirt + pants together for a full outfit try-on</p>
+          <p>• Use a full-body photo with good lighting for best results</p>
         </div>
 
-        {/* CTA Button */}
         <Button
           onClick={handleTryOn}
           disabled={!ready}
@@ -300,7 +387,6 @@ const VirtualTryOn = () => {
           )}
         </Button>
 
-        {/* Processing state */}
         {isProcessing && (
           <div className="bg-muted rounded-xl p-6 space-y-4 animate-fade-in">
             <div className="flex items-center justify-center">
@@ -320,7 +406,6 @@ const VirtualTryOn = () => {
           </div>
         )}
 
-        {/* Result */}
         {!isProcessing && result && (
           <div className="space-y-3 animate-fade-in">
             <h2 className="text-center font-semibold text-lg">Your Result ✨</h2>
@@ -338,14 +423,13 @@ const VirtualTryOn = () => {
             <Button
               variant="outline"
               className="w-full"
-              onClick={() => { setResult(null); setModelImage(null); setClothImage(null); }}
+              onClick={() => { setResult(null); setModelImage(null); setGarmentSlots([makeSlot("Shirt / Top")]); }}
             >
               Try Another
             </Button>
           </div>
         )}
 
-        {/* Error */}
         {!isProcessing && !result && lastError && (
           <div className="bg-destructive/10 border border-destructive/30 rounded-xl p-4 animate-fade-in">
             <p className="font-medium text-sm text-destructive">Could not generate result</p>
@@ -353,7 +437,6 @@ const VirtualTryOn = () => {
           </div>
         )}
 
-        {/* Empty placeholder */}
         {!isProcessing && !result && !lastError && (
           <div className="border border-dashed border-border rounded-xl p-8 text-center text-muted-foreground text-sm">
             Your try-on result will appear here
